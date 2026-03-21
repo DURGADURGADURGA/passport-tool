@@ -1,3 +1,6 @@
 streamlit
+Pillow
 reportlab
-pillow
+rembg
+opencv-python-headless
+numpy

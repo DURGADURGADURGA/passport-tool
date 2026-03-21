@@ -2,3 +2,5 @@ streamlit
 Pillow
 reportlab
 numpy
+rembg
+onnxruntime

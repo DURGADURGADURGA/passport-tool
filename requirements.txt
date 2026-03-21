@@ -1,6 +1,6 @@
-streamlit
-Pillow
-reportlab
-numpy
-rembg
-onnxruntime
+streamlit>=1.28.0
+Pillow>=9.0.0
+reportlab>=3.6.0
+numpy>=1.23.0
+onnxruntime==1.16.3
+rembg==2.0.50

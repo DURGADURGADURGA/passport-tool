@@ -30,6 +30,15 @@ MM_TO_PX_300DPI = 300 / 25.4
 
 st.set_page_config(page_title="PhotoPass Pro", page_icon="📷", layout="centered")
 
+# ── rembg lazy load (website pehle khule, library baad mein load ho) ──
+@st.cache_resource(show_spinner=False)
+def load_rembg():
+    try:
+        from rembg import remove as _remove
+        return _remove
+    except Exception:
+        return None
+
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800;900&display=swap');
@@ -130,15 +139,13 @@ html,body,[class*="css"]{ font-family:'Montserrat',sans-serif !important; }
 
 
 # ════════════════════════════════════
-#  PROCESSING FUNCTIONS (Pillow only)
+#  PROCESSING FUNCTIONS
 # ════════════════════════════════════
 
 def smart_crop(img: Image.Image, target_w_mm: float, target_h_mm: float) -> Image.Image:
-    """Smart center crop maintaining passport aspect ratio."""
     target_w_px = int(target_w_mm * MM_TO_PX_300DPI)
     target_h_px = int(target_h_mm * MM_TO_PX_300DPI)
     ratio = target_w_px / target_h_px
-
     w, h = img.size
     if w / h > ratio:
         new_w = int(h * ratio)
@@ -146,47 +153,23 @@ def smart_crop(img: Image.Image, target_w_mm: float, target_h_mm: float) -> Imag
         img = img.crop((x, 0, x + new_w, h))
     else:
         new_h = int(w / ratio)
-        # Shift crop slightly up — face is usually in upper portion
-        y = max(0, int((h - new_h) * 0.25))
+        y = max(0, int((h - new_h) * 0.2))
         img = img.crop((0, y, w, y + new_h))
-
     return img.resize((target_w_px, target_h_px), Image.LANCZOS)
 
 
-def make_white_background(img: Image.Image) -> Image.Image:
-    """Replace background with white using edge-based segmentation (Pillow only)."""
-    img_rgba = img.convert("RGBA")
-    data = np.array(img_rgba, dtype=np.float32)
-
-    r, g, b, a = data[:,:,0], data[:,:,1], data[:,:,2], data[:,:,3]
-
-    # Simple background detection: corners are usually background
-    h, w = r.shape
-    corner_size = max(10, min(h, w) // 10)
-    corners = np.concatenate([
-        data[:corner_size, :corner_size].reshape(-1, 4),
-        data[:corner_size, -corner_size:].reshape(-1, 4),
-        data[-corner_size:, :corner_size].reshape(-1, 4),
-        data[-corner_size:, -corner_size:].reshape(-1, 4),
-    ])
-    bg_color = corners[:, :3].mean(axis=0)
-
-    # Mask pixels similar to background color
-    diff = np.sqrt(((data[:,:,:3] - bg_color) ** 2).sum(axis=2))
-    threshold = 60
-    mask = diff < threshold
-
-    # Apply white background
-    result = data.copy()
-    result[mask, 0] = 255
-    result[mask, 1] = 255
-    result[mask, 2] = 255
-
-    return Image.fromarray(result.astype(np.uint8)).convert("RGB")
+def remove_bg_rembg(img: Image.Image, rembg_fn) -> Image.Image:
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+    result_bytes = rembg_fn(buf.read())
+    result = Image.open(io.BytesIO(result_bytes)).convert("RGBA")
+    white_bg = Image.new("RGBA", result.size, (255, 255, 255, 255))
+    white_bg.paste(result, mask=result.split()[3])
+    return white_bg.convert("RGB")
 
 
 def enhance_hd(img: Image.Image) -> Image.Image:
-    """Enhance photo quality for HD print output."""
     img = ImageEnhance.Sharpness(img).enhance(2.0)
     img = ImageEnhance.Contrast(img).enhance(1.2)
     img = ImageEnhance.Brightness(img).enhance(1.05)
@@ -195,23 +178,29 @@ def enhance_hd(img: Image.Image) -> Image.Image:
     return img
 
 
-def process_photo(img: Image.Image, target_w_mm: float, target_h_mm: float,
-                  do_bg: bool, do_enhance: bool) -> tuple:
+def process_photo(img, target_w_mm, target_h_mm, do_bg, do_enhance, rembg_fn):
     log = []
     img = img.convert("RGB")
     log.append("✅ Photo loaded")
 
+    # Crop first
     img = smart_crop(img, target_w_mm, target_h_mm)
-    log.append("✅ Smart crop — sahi ratio mein")
+    log.append("✅ Smart crop done")
 
+    # Background remove with rembg
     if do_bg:
-        img = make_white_background(img)
-        log.append("✅ White background applied")
+        if rembg_fn:
+            img = remove_bg_rembg(img, rembg_fn)
+            log.append("✅ Background removed (AI) → white")
+        else:
+            log.append("⚠️ rembg load nahi hua — BG skip")
 
+    # HD Enhance
     if do_enhance:
         img = enhance_hd(img)
-        log.append("✅ HD enhancement done — 300 DPI ready")
+        log.append("✅ HD enhancement done")
 
+    # Final exact size
     tw = int(target_w_mm * MM_TO_PX_300DPI)
     th = int(target_h_mm * MM_TO_PX_300DPI)
     img = img.resize((tw, th), Image.LANCZOS)
@@ -229,10 +218,10 @@ st.markdown("""
     <div class="hero-icon">📷</div>
     <h1>Photo<span>Pass</span> Pro</h1>
     <p>Upload karo — baaki sab automatic!</p>
-    <div class="ai-badge">✨ Smart Crop · White BG · HD Quality · PDF Ready</div>
+    <div class="ai-badge">🤖 AI BG Remove · Smart Crop · HD 300 DPI · PDF Ready</div>
     <div class="steps-row">
         <div class="step-pill"><span class="sn">1</span><span class="st">Upload</span></div>
-        <div class="step-pill"><span class="sn">2</span><span class="st">Auto Process</span></div>
+        <div class="step-pill"><span class="sn">2</span><span class="st">AI Process</span></div>
         <div class="step-pill"><span class="sn">3</span><span class="st">PDF Banao</span></div>
         <div class="step-pill"><span class="sn">4</span><span class="st">Download</span></div>
     </div>
@@ -258,20 +247,20 @@ if size_choice == "Custom":
 else:
     target_w_mm, target_h_mm = PASSPORT_SIZES[size_choice]
 
-# Options
-st.markdown('<div class="sec-lbl" style="margin-top:.8rem">⚙️ Processing Options</div>', unsafe_allow_html=True)
+# AI Options
+st.markdown('<div class="sec-lbl" style="margin-top:.8rem">⚙️ AI Options</div>', unsafe_allow_html=True)
 col_a, col_b = st.columns(2)
 with col_a:
-    do_bg = st.checkbox("🎨 White Background", value=True)
+    do_bg = st.checkbox("🎨 AI Background Remove (White)", value=True)
 with col_b:
-    do_enhance = st.checkbox("⚡ HD Enhancement", value=True)
+    do_enhance = st.checkbox("⚡ HD Enhancement (300 DPI)", value=True)
 
 st.markdown("<div style='height:.8rem'></div>", unsafe_allow_html=True)
 
 # Upload
 st.markdown('<div class="sec-lbl">📁 Photos Upload Karo</div>', unsafe_allow_html=True)
 uploaded_files = st.file_uploader(
-    "Koi bhi photo chalegi — auto process hogi!",
+    "Koi bhi photo chalegi — AI sab theek kar dega!",
     type=["jpg", "jpeg", "png"],
     accept_multiple_files=True,
     label_visibility="collapsed"
@@ -281,7 +270,7 @@ if uploaded_files:
     st.markdown(f"""
     <div style="background:#e0f7fa;border:1.5px solid #80deea;border-radius:12px;
     padding:.8rem 1.2rem;margin:1rem 0;color:#006064;font-size:.9rem;font-weight:700">
-        ✅ &nbsp; {len(uploaded_files)} photo(s) ready — process hogi!
+        ✅ &nbsp; {len(uploaded_files)} photo(s) ready!
     </div>
     """, unsafe_allow_html=True)
     cols = st.columns(min(len(uploaded_files), 6))
@@ -291,10 +280,17 @@ if uploaded_files:
 
 st.markdown('<div style="height:1px;background:#b2ebf2;margin:1.5rem 0"></div>', unsafe_allow_html=True)
 
-if st.button("✨   Process + PDF Generate Karo"):
+if st.button("🤖   AI Process + PDF Generate Karo"):
     if not uploaded_files:
         st.error("❌ Pehle photos upload karo!")
     else:
+        # Load rembg only when needed
+        if do_bg:
+            with st.spinner("🤖 AI model load ho raha hai (pehli baar thoda time lagega)..."):
+                rembg_fn = load_rembg()
+        else:
+            rembg_fn = None
+
         total = len(uploaded_files) * 3 + 3
         prog = st.progress(0)
         status = st.empty()
@@ -304,7 +300,8 @@ if st.button("✨   Process + PDF Generate Karo"):
             step[0] += n
             prog.progress(min(int(step[0]/total*100), 95), text=msg)
             status.markdown(
-                f'<p style="text-align:center;color:#00838f;font-size:.85rem;font-weight:600;margin-top:.3rem">{msg}</p>',
+                f'<p style="text-align:center;color:#00838f;font-size:.85rem;'
+                f'font-weight:600;margin-top:.3rem">{msg}</p>',
                 unsafe_allow_html=True)
 
         adv("🚀 Processing shuru...")
@@ -312,26 +309,30 @@ if st.button("✨   Process + PDF Generate Karo"):
         all_logs = []
 
         for idx, uf in enumerate(uploaded_files):
-            adv(f"✂️ Photo {idx+1}/{len(uploaded_files)} process ho rahi hai...")
+            adv(f"🎨 Photo {idx+1}/{len(uploaded_files)} — AI process kar raha hai...")
             raw = Image.open(uf)
-            pimg, logs = process_photo(raw, target_w_mm, target_h_mm, do_bg, do_enhance)
+            pimg, logs = process_photo(
+                raw, target_w_mm, target_h_mm,
+                do_bg, do_enhance, rembg_fn
+            )
             processed.append((pimg, os.path.splitext(uf.name)[0]))
             all_logs += [f"Photo {idx+1}: {l}" for l in logs]
             adv(f"✅ Photo {idx+1} ready!", n=2)
 
-        # Preview processed
-        st.markdown('<div class="sec-lbl" style="margin-top:1rem">✅ Processed Photos</div>', unsafe_allow_html=True)
+        # Preview
+        st.markdown('<div class="sec-lbl" style="margin-top:1rem">✅ Processed Photos Preview</div>', unsafe_allow_html=True)
         pcols = st.columns(min(len(processed), 6))
         for i, (pimg, pname) in enumerate(processed):
             with pcols[i % 6]:
-                st.image(pimg, use_container_width=True, caption="Processed")
+                st.image(pimg, use_container_width=True, caption="AI Processed ✓")
 
-        with st.expander("📋 Processing Log"):
+        with st.expander("📋 AI Processing Log"):
             for l in all_logs:
                 st.markdown(f"<small style='color:#00838f'>{l}</small>", unsafe_allow_html=True)
 
         adv("📄 PDF ban raha hai...", n=1)
 
+        # PDF
         usable_w = PAGE_W - 2*MARGIN - (PHOTOS_PER_ROW-1)*GAP
         adj_w = usable_w / PHOTOS_PER_ROW
 
@@ -392,7 +393,7 @@ if st.button("✨   Process + PDF Generate Karo"):
         <div style="background:#e0f7fa;border:2px solid #00bcd4;border-radius:14px;
         padding:1rem 1.2rem;text-align:center;color:#006064;font-size:1rem;
         font-weight:700;margin:1rem 0">
-            🎉 PDF ready hai — HD print ke liye bilkul taiyar!
+            🎉 AI ne sab automatic kar diya! HD PDF print ke liye taiyar hai.
         </div>
         """, unsafe_allow_html=True)
 
@@ -406,14 +407,14 @@ if st.button("✨   Process + PDF Generate Karo"):
 st.markdown("""
 <div class="info-section">
     <div class="info-col">
+        <div class="info-icon-wrap">🤖</div>
+        <h4>AI BG Remove</h4>
+        <p>rembg AI se<br>perfect white BG</p>
+    </div>
+    <div class="info-col">
         <div class="info-icon-wrap">✂️</div>
         <h4>Smart Crop</h4>
         <p>Auto sahi ratio<br>mein crop</p>
-    </div>
-    <div class="info-col">
-        <div class="info-icon-wrap">🎨</div>
-        <h4>White BG</h4>
-        <p>Background auto<br>white ho jaata</p>
     </div>
     <div class="info-col">
         <div class="info-icon-wrap">⚡</div>

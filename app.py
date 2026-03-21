@@ -1,9 +1,7 @@
 import os
-import io
 import tempfile
-import numpy as np
 import streamlit as st
-from PIL import Image, ImageOps, ImageEnhance, ImageFilter
+from PIL import Image, ImageOps
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 
@@ -16,42 +14,22 @@ PHOTOS_PER_ROW = 6
 MAX_HEIGHT_CM = 4.5
 CM_TO_PT = 28.35
 MAX_H = int(MAX_HEIGHT_CM * CM_TO_PT)
-
-PASSPORT_SIZES = {
-    "🇮🇳 India  (35×45 mm)": (35, 45),
-    "🇺🇸 USA    (51×51 mm)": (51, 51),
-    "🇬🇧 UK     (35×45 mm)": (35, 45),
-    "🇦🇪 UAE    (40×60 mm)": (40, 60),
-    "🇪🇺 Europe (35×45 mm)": (35, 45),
-    "Custom": None,
-}
-MM_TO_PX_300DPI = 300 / 25.4
 # ============================================
 
 st.set_page_config(page_title="PhotoPass Pro", page_icon="📷", layout="centered")
-
-# ── rembg cached load ──
-@st.cache_resource(show_spinner=False)
-def load_rembg():
-    try:
-        from rembg import remove
-        return remove
-    except Exception as e:
-        return None
 
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800;900&display=swap');
 
 @keyframes fadeDown { from{opacity:0;transform:translateY(-20px)} to{opacity:1;transform:translateY(0)} }
-@keyframes fadeUp   { from{opacity:0;transform:translateY(20px)}  to{opacity:1;transform:translateY(0)} }
 @keyframes pulse    { 0%,100%{box-shadow:0 0 0 0 rgba(0,188,212,.4)} 50%{box-shadow:0 0 0 12px rgba(0,188,212,0)} }
 @keyframes shimmer  { 0%{background-position:-600px 0} 100%{background-position:600px 0} }
 
 html,body,[class*="css"]{ font-family:'Montserrat',sans-serif !important; }
 .stApp{ background:#f0fafb; }
 #MainMenu,footer,header{ visibility:hidden; }
-.block-container{ padding-top:0 !important; padding-bottom:3rem; max-width:740px; }
+.block-container{ padding-top:0 !important; padding-bottom:3rem; max-width:720px; }
 
 .hero{ background:#fff; border-bottom:3px solid #00bcd4; padding:2.8rem 1.5rem 2rem;
   margin:-1rem -1rem 2rem; text-align:center; animation:fadeDown .6s ease both; }
@@ -62,43 +40,44 @@ html,body,[class*="css"]{ font-family:'Montserrat',sans-serif !important; }
   letter-spacing:-.02em;margin-bottom:.5rem; }
 .hero h1 span{ color:#00bcd4; }
 .hero p{ font-size:1rem;font-weight:600;color:#555;margin-bottom:1.4rem; }
-.ai-badge{ display:inline-flex;align-items:center;gap:6px;background:#e0f7fa;
-  border:1.5px solid #00bcd4;border-radius:20px;padding:5px 14px;
-  font-size:.78rem;font-weight:700;color:#006064; }
-.steps-row{ display:flex;justify-content:center;gap:8px;flex-wrap:wrap;margin-top:1rem; }
+.steps-row{ display:flex;justify-content:center;gap:8px;flex-wrap:wrap; }
 .step-pill{ background:#e0f7fa;border-radius:30px;padding:7px 16px;
   display:inline-flex;align-items:center;gap:7px; }
 .step-pill .sn{ background:#00bcd4;color:#fff;font-size:11px;font-weight:800;
   width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center; }
 .step-pill .st{ font-size:12px;font-weight:700;color:#007b8a; }
+
 .sec-lbl{ font-size:.75rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;
   color:#00838f;margin-bottom:.5rem; }
 
 [data-testid="stFileUploader"]{ background:#fff !important;border:2.5px dashed #00bcd4 !important;
   border-radius:16px !important;padding:2rem !important;transition:all .2s !important; }
 [data-testid="stFileUploader"]:hover{ background:#e0f7fa !important; }
+
 [data-testid="stNumberInput"] input{ background:#fff !important;border:2px solid #b2ebf2 !important;
   color:#0d0d0d !important;border-radius:10px !important;
   font-family:'Montserrat',sans-serif !important;font-size:1.3rem !important;
   font-weight:900 !important;text-align:center !important; }
 [data-testid="stNumberInput"] button{ background:#00bcd4 !important;border:none !important;
   color:#fff !important;border-radius:8px !important;font-weight:900 !important; }
-[data-testid="stSelectbox"]>div>div{ background:#fff !important;
-  border:2px solid #b2ebf2 !important;border-radius:10px !important;font-weight:700 !important; }
+
 [data-testid="stImage"] img{ border-radius:10px !important;
   border:2px solid #b2ebf2 !important;transition:transform .2s !important; }
 [data-testid="stImage"] img:hover{ transform:scale(1.05) !important; }
+
 .stButton>button{ width:100% !important;background:#00bcd4 !important;color:#fff !important;
   border:none !important;border-radius:12px !important;padding:1rem 2rem !important;
   font-family:'Montserrat',sans-serif !important;font-size:1rem !important;
   font-weight:800 !important;letter-spacing:.06em !important;text-transform:uppercase !important;
   box-shadow:0 4px 16px rgba(0,188,212,.35) !important;transition:all .2s !important; }
 .stButton>button:hover{ background:#0097a7 !important;transform:translateY(-2px) !important; }
+
 [data-testid="stProgress"]>div>div{
   background:linear-gradient(90deg,#00bcd4,#4dd0e1,#00bcd4) !important;
   background-size:600px 100% !important;animation:shimmer 1.5s linear infinite !important;
   border-radius:100px !important; }
 [data-testid="stProgress"]{ background:#b2ebf2 !important;border-radius:100px !important; }
+
 [data-testid="stDownloadButton"] button{ width:100% !important;background:#00897b !important;
   color:#fff !important;border:none !important;border-radius:12px !important;
   padding:1rem 2rem !important;font-family:'Montserrat',sans-serif !important;
@@ -107,7 +86,7 @@ html,body,[class*="css"]{ font-family:'Montserrat',sans-serif !important; }
 [data-testid="stDownloadButton"] button:hover{ background:#00695c !important;transform:translateY(-2px) !important; }
 
 .info-section{ background:#e0f2f1;border-top:3px solid #00bcd4;padding:2rem 1rem 1.5rem;
-  margin:2rem -1rem -1rem;display:flex;gap:0; }
+  margin:2rem -1rem -1rem;display:flex; }
 .info-col{ flex:1;text-align:center;padding:0 10px;border-right:1px solid #b2dfdb; }
 .info-col:last-child{ border-right:none; }
 .info-icon-wrap{ width:52px;height:52px;background:#00bcd4;border-radius:50%;
@@ -127,158 +106,57 @@ html,body,[class*="css"]{ font-family:'Montserrat',sans-serif !important; }
 </style>
 """, unsafe_allow_html=True)
 
-
-# ════════════════════════════════════
-#  PROCESSING FUNCTIONS
-# ════════════════════════════════════
-
-def remove_bg(img: Image.Image, rembg_fn) -> Image.Image:
-    """Remove background using rembg AI, replace with white."""
-    buf = io.BytesIO()
-    img.save(buf, format="PNG")
-    buf.seek(0)
-    result_bytes = rembg_fn(buf.read())
-    result = Image.open(io.BytesIO(result_bytes)).convert("RGBA")
-    white_bg = Image.new("RGBA", result.size, (255, 255, 255, 255))
-    white_bg.paste(result, mask=result.split()[3])
-    return white_bg.convert("RGB")
-
-
-def smart_crop(img: Image.Image, target_w_mm: float, target_h_mm: float) -> Image.Image:
-    target_w_px = int(target_w_mm * MM_TO_PX_300DPI)
-    target_h_px = int(target_h_mm * MM_TO_PX_300DPI)
-    ratio = target_w_px / target_h_px
-    w, h = img.size
-    if w / h > ratio:
-        new_w = int(h * ratio)
-        x = (w - new_w) // 2
-        img = img.crop((x, 0, x + new_w, h))
-    else:
-        new_h = int(w / ratio)
-        y = max(0, int((h - new_h) * 0.2))
-        img = img.crop((0, y, w, y + new_h))
-    return img.resize((target_w_px, target_h_px), Image.LANCZOS)
-
-
-def enhance_hd(img: Image.Image) -> Image.Image:
-    img = ImageEnhance.Sharpness(img).enhance(2.0)
-    img = ImageEnhance.Contrast(img).enhance(1.2)
-    img = ImageEnhance.Brightness(img).enhance(1.05)
-    img = ImageEnhance.Color(img).enhance(1.1)
-    img = img.filter(ImageFilter.UnsharpMask(radius=1.5, percent=150, threshold=3))
-    return img
-
-
-def process_photo(img, target_w_mm, target_h_mm, do_bg, do_enhance, rembg_fn):
-    log = []
-    img = img.convert("RGB")
-    log.append("✅ Photo loaded")
-
-    # BG remove FIRST (easier on full image before crop)
-    if do_bg and rembg_fn:
-        img = remove_bg(img, rembg_fn)
-        log.append("✅ AI background removed → white")
-
-    # Then crop to passport size
-    img = smart_crop(img, target_w_mm, target_h_mm)
-    log.append("✅ Smart crop done")
-
-    # HD enhance
-    if do_enhance:
-        img = enhance_hd(img)
-        log.append("✅ HD quality enhanced")
-
-    tw = int(target_w_mm * MM_TO_PX_300DPI)
-    th = int(target_h_mm * MM_TO_PX_300DPI)
-    img = img.resize((tw, th), Image.LANCZOS)
-    log.append(f"✅ Final: {tw}×{th}px @ 300 DPI")
-
-    return img, log
-
-
-# ════════════════════
-#  UI
-# ════════════════════
-
+# ── Hero ──
 st.markdown("""
 <div class="hero">
     <div class="hero-icon">📷</div>
     <h1>Photo<span>Pass</span> Pro</h1>
-    <p>Upload karo — baaki sab automatic!</p>
-    <div class="ai-badge">🤖 AI BG Remove · Smart Crop · HD 300 DPI · PDF</div>
+    <p>Multiple logon ki photos ek saath A4 PDF mein arrange karo!</p>
     <div class="steps-row">
-        <div class="step-pill"><span class="sn">1</span><span class="st">Upload</span></div>
-        <div class="step-pill"><span class="sn">2</span><span class="st">AI Process</span></div>
+        <div class="step-pill"><span class="sn">1</span><span class="st">Upload Photos</span></div>
+        <div class="step-pill"><span class="sn">2</span><span class="st">Copies Chuno</span></div>
         <div class="step-pill"><span class="sn">3</span><span class="st">PDF Banao</span></div>
-        <div class="step-pill"><span class="sn">4</span><span class="st">Download</span></div>
+        <div class="step-pill"><span class="sn">4</span><span class="st">Download Karo</span></div>
     </div>
 </div>
 """, unsafe_allow_html=True)
 
-# Settings
-col1, col2 = st.columns([2, 1])
-with col1:
-    st.markdown('<div class="sec-lbl">🌍 Country / Size</div>', unsafe_allow_html=True)
-    size_choice = st.selectbox("size", list(PASSPORT_SIZES.keys()), label_visibility="collapsed")
-with col2:
-    st.markdown('<div class="sec-lbl">🔢 Copies</div>', unsafe_allow_html=True)
-    copies = st.number_input("copies", min_value=1, max_value=20, value=2, step=1, label_visibility="collapsed")
-
-if size_choice == "Custom":
-    c1, c2 = st.columns(2)
-    with c1:
-        custom_w = st.number_input("Width (mm)", min_value=20, max_value=100, value=35)
-    with c2:
-        custom_h = st.number_input("Height (mm)", min_value=20, max_value=100, value=45)
-    target_w_mm, target_h_mm = float(custom_w), float(custom_h)
-else:
-    target_w_mm, target_h_mm = PASSPORT_SIZES[size_choice]
-
-# Options
-st.markdown('<div class="sec-lbl" style="margin-top:.8rem">⚙️ Options</div>', unsafe_allow_html=True)
-col_a, col_b = st.columns(2)
-with col_a:
-    do_bg = st.checkbox("🎨 AI White Background", value=True)
-with col_b:
-    do_enhance = st.checkbox("⚡ HD Enhancement", value=True)
-
-st.markdown("<div style='height:.8rem'></div>", unsafe_allow_html=True)
-
-# Upload
+# ── Upload ──
 st.markdown('<div class="sec-lbl">📁 Photos Upload Karo</div>', unsafe_allow_html=True)
 uploaded_files = st.file_uploader(
-    "Koi bhi photo chalegi — AI sab theek karega!",
+    "JPG, JPEG ya PNG — ek ya zyada",
     type=["jpg", "jpeg", "png"],
     accept_multiple_files=True,
     label_visibility="collapsed"
 )
 
+st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
+
+# ── Copies ──
+st.markdown('<div class="sec-lbl">🔢 Har Photo Ki Copies</div>', unsafe_allow_html=True)
+copies = st.number_input("copies", min_value=1, max_value=20, value=2, step=1, label_visibility="collapsed")
+
+# ── Preview ──
 if uploaded_files:
     st.markdown(f"""
     <div style="background:#e0f7fa;border:1.5px solid #80deea;border-radius:12px;
     padding:.8rem 1.2rem;margin:1rem 0;color:#006064;font-size:.9rem;font-weight:700">
-        ✅ &nbsp; {len(uploaded_files)} photo(s) ready!
+        ✅ &nbsp; {len(uploaded_files)} photo(s) select ki gayi hain
     </div>
     """, unsafe_allow_html=True)
     cols = st.columns(min(len(uploaded_files), 6))
     for i, f in enumerate(uploaded_files):
         with cols[i % 6]:
-            st.image(f, use_container_width=True, caption="Original")
+            st.image(f, use_container_width=True, caption=f.name.split(".")[0][:10])
 
 st.markdown('<div style="height:1px;background:#b2ebf2;margin:1.5rem 0"></div>', unsafe_allow_html=True)
 
-if st.button("🤖   AI Process + PDF Generate Karo"):
+# ── Generate ──
+if st.button("🖨️   PDF Generate Karo"):
     if not uploaded_files:
         st.error("❌ Pehle photos upload karo!")
     else:
-        rembg_fn = None
-        if do_bg:
-            with st.spinner("🤖 AI model load ho raha hai..."):
-                rembg_fn = load_rembg()
-            if not rembg_fn:
-                st.warning("⚠️ AI BG removal load nahi hua — baaki process jaari rahegi.")
-
-        total = len(uploaded_files) * 3 + 3
+        total = len(uploaded_files) + 3
         prog = st.progress(0)
         status = st.empty()
         step = [0]
@@ -287,33 +165,10 @@ if st.button("🤖   AI Process + PDF Generate Karo"):
             step[0] += n
             prog.progress(min(int(step[0]/total*100), 95), text=msg)
             status.markdown(
-                f'<p style="text-align:center;color:#00838f;font-size:.85rem;'
-                f'font-weight:600;margin-top:.3rem">{msg}</p>',
+                f'<p style="text-align:center;color:#00838f;font-size:.85rem;font-weight:600;margin-top:.3rem">{msg}</p>',
                 unsafe_allow_html=True)
 
-        adv("🚀 Processing shuru...")
-        processed = []
-        all_logs = []
-
-        for idx, uf in enumerate(uploaded_files):
-            adv(f"✨ Photo {idx+1}/{len(uploaded_files)} AI process kar raha hai...")
-            raw = Image.open(uf)
-            pimg, logs = process_photo(raw, target_w_mm, target_h_mm, do_bg, do_enhance, rembg_fn)
-            processed.append((pimg, os.path.splitext(uf.name)[0]))
-            all_logs += [f"Photo {idx+1}: {l}" for l in logs]
-            adv(f"✅ Photo {idx+1} done!", n=2)
-
-        st.markdown('<div class="sec-lbl" style="margin-top:1rem">✅ Processed Photos</div>', unsafe_allow_html=True)
-        pcols = st.columns(min(len(processed), 6))
-        for i, (pimg, pname) in enumerate(processed):
-            with pcols[i % 6]:
-                st.image(pimg, use_container_width=True, caption="AI ✓")
-
-        with st.expander("📋 Processing Log"):
-            for l in all_logs:
-                st.markdown(f"<small style='color:#00838f'>{l}</small>", unsafe_allow_html=True)
-
-        adv("📄 PDF ban raha hai...", n=1)
+        adv("📐 PDF tayar ho raha hai...")
 
         usable_w = PAGE_W - 2*MARGIN - (PHOTOS_PER_ROW-1)*GAP
         adj_w = usable_w / PHOTOS_PER_ROW
@@ -328,15 +183,21 @@ if st.button("🤖   AI Process + PDF Generate Karo"):
         photo_in_row = 0
         tmp_files = []
 
-        for pimg, pname in processed:
-            ow, oh = pimg.size
+        for idx, uf in enumerate(uploaded_files):
+            adv(f"🖼️ Photo {idx+1}/{len(uploaded_files)} — {uf.name[:15]}...")
+
+            img = Image.open(uf).convert("RGB")
+            ow, oh = img.size
             scale = min(adj_w/ow, MAX_H/oh, 1)
             fw, fh = int(ow*scale), int(oh*scale)
-            bordered = ImageOps.expand(pimg, border=BORDER, fill="black")
+
+            img_b = ImageOps.expand(img, border=BORDER, fill="black")
             tf = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
             tf.close()
-            bordered.save(tf.name, format="PNG", dpi=(300, 300))
+            img_b.save(tf.name, format="PNG", dpi=(300, 300))
             tmp_files.append(tf.name)
+
+            fname = os.path.splitext(uf.name)[0]
 
             for _ in range(int(copies)):
                 if y - fh < MARGIN:
@@ -344,19 +205,24 @@ if st.button("🤖   AI Process + PDF Generate Karo"):
                     x, y = x_s, y_s
                     row_max_h = 0
                     photo_in_row = 0
+
                 c.drawImage(tf.name, x, y-fh, fw, fh, preserveAspectRatio=True, mask=None)
                 c.setFont("Helvetica", 6)
                 c.setFillColorRGB(0, 0, 0)
-                c.drawString(x+3, y-fh+3, pname[:20])
+                c.drawString(x+3, y-fh+3, fname[:20])
+
                 row_max_h = max(row_max_h, fh)
                 photo_in_row += 1
                 x += fw + GAP
+
                 if photo_in_row >= PHOTOS_PER_ROW:
                     x, y = x_s, y - row_max_h - GAP
                     row_max_h = 0
                     photo_in_row = 0
 
+        adv("💾 PDF save ho raha hai...", n=1)
         c.save()
+
         for f in tmp_files:
             os.remove(f)
         with open(pdf_path, "rb") as f:
@@ -370,23 +236,35 @@ if st.button("🤖   AI Process + PDF Generate Karo"):
         <div style="background:#e0f7fa;border:2px solid #00bcd4;border-radius:14px;
         padding:1rem 1.2rem;text-align:center;color:#006064;font-size:1rem;
         font-weight:700;margin:1rem 0">
-            🎉 AI ne sab automatic kar diya! HD PDF ready hai.
+            🎉 PDF ready hai — print ke liye bilkul taiyar!
         </div>
         """, unsafe_allow_html=True)
 
         st.download_button(
-            label="⬇️   HD PDF Download Karo",
+            label="⬇️   PDF Download Karo",
             data=pdf_data,
-            file_name="photopass_pro.pdf",
+            file_name="passport_photos.pdf",
             mime="application/pdf"
         )
 
+# ── Info + Footer ──
 st.markdown("""
 <div class="info-section">
-    <div class="info-col"><div class="info-icon-wrap">🤖</div><h4>AI BG Remove</h4><p>Perfect white<br>background</p></div>
-    <div class="info-col"><div class="info-icon-wrap">✂️</div><h4>Smart Crop</h4><p>Auto passport<br>ratio crop</p></div>
-    <div class="info-col"><div class="info-icon-wrap">⚡</div><h4>HD 300 DPI</h4><p>Print bilkul<br>sharp</p></div>
-    <div class="info-col"><div class="info-icon-wrap">🌍</div><h4>5 Countries</h4><p>India, USA, UK<br>UAE, Europe</p></div>
+    <div class="info-col">
+        <div class="info-icon-wrap">⚡</div>
+        <h4>Fast & Free</h4>
+        <p>Koi signup<br>nahi chahiye</p>
+    </div>
+    <div class="info-col">
+        <div class="info-icon-wrap">🖨️</div>
+        <h4>A4 PDF Ready</h4>
+        <p>Print ke liye<br>bilkul taiyar</p>
+    </div>
+    <div class="info-col">
+        <div class="info-icon-wrap">🔒</div>
+        <h4>100% Secure</h4>
+        <p>Photos kahin<br>save nahi hoti</p>
+    </div>
 </div>
 <div class="footer-bar">
     <p>PHOTOPASS PRO &nbsp;·&nbsp; FREE TO USE &nbsp;·&nbsp; NO SIGNUP REQUIRED</p>

@@ -2,5 +2,3 @@ streamlit
 Pillow
 reportlab
 numpy
-rembg==0.1.0
-onnxruntime

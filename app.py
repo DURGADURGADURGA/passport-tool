@@ -330,8 +330,14 @@ html, body, [class*="css"] {
     unsafe_allow_html=True,
 )
 
-# ── Processing Functions ──
+# ── Session State Memory Initializer ──
+if "processed" not in st.session_state:
+    st.session_state.processed = False
+    st.session_state.pdf_bytes = None
+    st.session_state.pil_pages = []
+    st.session_state.docx_bytes = None
 
+# ── Processing Functions ──
 
 def build_pdf_bytes(uploaded_files, copies):
     """Generates A4 PDF using ReportLab."""
@@ -349,6 +355,7 @@ def build_pdf_bytes(uploaded_files, copies):
     tmp_files = []
 
     for uf in uploaded_files:
+        uf.seek(0)
         img = Image.open(uf).convert("RGB")
         ow, oh = img.size
         scale = min(adj_w / ow, MAX_H / oh, 1)
@@ -575,6 +582,7 @@ st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
 if st.button("⚡ Files Process & Generate Karo"):
     if not uploaded_files:
         st.error("❌ Pehle photos upload karo!")
+        st.session_state.processed = False
     else:
         prog = st.progress(0)
         status = st.empty()
@@ -588,80 +596,83 @@ if st.button("⚡ Files Process & Generate Karo"):
             )
 
         update_prog(20, "📐 PDF layout tayar ho raha hai...")
-        pdf_bytes = build_pdf_bytes(uploaded_files, copies)
+        st.session_state.pdf_bytes = build_pdf_bytes(uploaded_files, copies)
 
         update_prog(60, "🖼️ High-Res Image (JPG) layout ban raha hai...")
-        pil_pages = build_pil_pages(uploaded_files, copies)
+        st.session_state.pil_pages = build_pil_pages(uploaded_files, copies)
 
         update_prog(85, "📝 Word Document (.docx) generate ho raha hai...")
-        docx_bytes = build_docx_bytes(pil_pages)
+        st.session_state.docx_bytes = build_docx_bytes(st.session_state.pil_pages)
 
         update_prog(100, "✅ Sabhi Formats Ready!")
         status.empty()
+        st.session_state.processed = True
 
-        st.markdown(
-            """
-        <div style="background:#e0f7fa;border:2px solid #00bcd4;border-radius:12px;
-        padding:.9rem 1rem;text-align:center;color:#006064;font-size:.95rem;
-        font-weight:700;margin:1rem 0">
-            🎉 Sabhi formats tayar hain! Apni pasand ka file format neeche se download karein:
-        </div>
-        """,
-            unsafe_allow_html=True,
+# ── SEPARATE DOWNLOAD BUTTONS (STAYS ACTIVE IN SESSION) ──
+if st.session_state.get("processed", False) and uploaded_files:
+    st.markdown(
+        """
+    <div style="background:#e0f7fa;border:2px solid #00bcd4;border-radius:12px;
+    padding:.9rem 1rem;text-align:center;color:#006064;font-size:.95rem;
+    font-weight:700;margin:1rem 0">
+        🎉 Sabhi formats tayar hain! Kisi bhi format ko kitni bhi baar download karein:
+    </div>
+    """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown(
+        '<span class="sec-lbl" style="text-align:center; font-size:0.85rem;">⬇️ Download Buttons</span>',
+        unsafe_allow_html=True,
+    )
+
+    col1, col2, col3 = st.columns(3)
+
+    # 1. PDF Download
+    with col1:
+        st.download_button(
+            label="📄 PDF Sheet",
+            data=st.session_state.pdf_bytes,
+            file_name="passport_photos.pdf",
+            mime="application/pdf",
+            use_container_width=True,
         )
 
-        # ── SEPARATE DOWNLOAD BUTTONS ──
-        st.markdown(
-            '<span class="sec-lbl" style="text-align:center; font-size:0.85rem;">⬇️ Download Buttons</span>',
-            unsafe_allow_html=True,
-        )
-
-        col1, col2, col3 = st.columns(3)
-
-        # 1. PDF Download
-        with col1:
+    # 2. JPG Download (Page wise if multiple pages)
+    with col2:
+        pil_pages = st.session_state.pil_pages
+        if len(pil_pages) == 1:
+            img_byte_arr = io.BytesIO()
+            pil_pages[0].save(img_byte_arr, format="JPEG", quality=95)
             st.download_button(
-                label="📄 PDF Sheet",
-                data=pdf_bytes,
-                file_name="passport_photos.pdf",
-                mime="application/pdf",
+                label="🖼️ JPG Image",
+                data=img_byte_arr.getvalue(),
+                file_name="passport_photos.jpg",
+                mime="image/jpeg",
                 use_container_width=True,
             )
-
-        # 2. JPG Download (Page wise if multiple pages)
-        with col2:
-            if len(pil_pages) == 1:
+        else:
+            for idx, page_img in enumerate(pil_pages):
                 img_byte_arr = io.BytesIO()
-                pil_pages[0].save(img_byte_arr, format="JPEG", quality=95)
+                page_img.save(img_byte_arr, format="JPEG", quality=95)
                 st.download_button(
-                    label="🖼️ JPG Image",
+                    label=f"🖼️ JPG (P. {idx+1})",
                     data=img_byte_arr.getvalue(),
-                    file_name="passport_photos.jpg",
+                    file_name=f"passport_photos_page_{idx+1}.jpg",
                     mime="image/jpeg",
+                    key=f"jpg_btn_{idx}",
                     use_container_width=True,
                 )
-            else:
-                for idx, page_img in enumerate(pil_pages):
-                    img_byte_arr = io.BytesIO()
-                    page_img.save(img_byte_arr, format="JPEG", quality=95)
-                    st.download_button(
-                        label=f"🖼️ JPG (P. {idx+1})",
-                        data=img_byte_arr.getvalue(),
-                        file_name=f"passport_photos_page_{idx+1}.jpg",
-                        mime="image/jpeg",
-                        key=f"jpg_btn_{idx}",
-                        use_container_width=True,
-                    )
 
-        # 3. Word Document Download
-        with col3:
-            st.download_button(
-                label="📝 Word Document",
-                data=docx_bytes,
-                file_name="passport_photos.docx",
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                use_container_width=True,
-            )
+    # 3. Word Document Download
+    with col3:
+        st.download_button(
+            label="📝 Word Document",
+            data=st.session_state.docx_bytes,
+            file_name="passport_photos.docx",
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            use_container_width=True,
+        )
 
 st.markdown("</div>", unsafe_allow_html=True)
 

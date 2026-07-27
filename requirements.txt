@@ -4,3 +4,4 @@ reportlab
 python-docx
 opencv-python-headless
 numpy
+streamlit-cropper

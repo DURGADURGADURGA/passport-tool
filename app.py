@@ -1,9 +1,13 @@
+import io
 import os
 import tempfile
-import streamlit as st
-from PIL import Image, ImageOps
+import docx
+from docx import Document
+from docx.shared import Inches
+from PIL import Image, ImageDraw, ImageFont, ImageOps
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
+import streamlit as st
 
 # ================= SETTINGS =================
 PAGE_W, PAGE_H = A4
@@ -20,10 +24,11 @@ st.set_page_config(
     page_title="PhotoPass Pro",
     page_icon="📷",
     layout="centered",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="collapsed",
 )
 
-st.markdown("""
+st.markdown(
+    """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800;900&display=swap');
 
@@ -179,7 +184,7 @@ html, body, [class*="css"] {
     display: block !important;
 }
 
-/* ── Generate button ── */
+/* ── Primary Action Button ── */
 .stButton > button {
     width: 100% !important;
     background: #00bcd4 !important;
@@ -201,9 +206,6 @@ html, body, [class*="css"] {
     background: #0097a7 !important;
     transform: translateY(-1px) !important;
 }
-.stButton > button:active {
-    transform: translateY(0) !important;
-}
 
 /* ── Progress ── */
 [data-testid="stProgress"] > div > div {
@@ -217,22 +219,23 @@ html, body, [class*="css"] {
     border-radius: 100px !important;
 }
 
-/* ── Download button ── */
+/* ── Download buttons ── */
 [data-testid="stDownloadButton"] button {
     width: 100% !important;
     background: #00897b !important;
     color: #fff !important;
     border: none !important;
-    border-radius: 12px !important;
-    padding: .9rem 1rem !important;
+    border-radius: 10px !important;
+    padding: .8rem .8rem !important;
     font-family: 'Montserrat', sans-serif !important;
-    font-size: clamp(.9rem, 2.5vw, 1rem) !important;
+    font-size: clamp(.8rem, 2.2vw, .9rem) !important;
     font-weight: 800 !important;
-    letter-spacing: .05em !important;
+    letter-spacing: .03em !important;
     text-transform: uppercase !important;
-    min-height: 52px !important;
+    min-height: 48px !important;
     touch-action: manipulation !important;
     transition: all .2s !important;
+    margin-bottom: 8px !important;
 }
 [data-testid="stDownloadButton"] button:hover {
     background: #00695c !important;
@@ -291,9 +294,7 @@ html, body, [class*="css"] {
     margin: 1.2rem 0;
 }
 
-/* ══════════════════════════════
-   MOBILE — max 600px
-══════════════════════════════ */
+/* MOBILE — max 600px */
 @media (max-width: 600px) {
     .hero { padding: 1.8rem 1rem 1.5rem; }
     .hero-icon { width: 60px; height: 60px; font-size: 26px; }
@@ -314,177 +315,359 @@ html, body, [class*="css"] {
     .footer-bar p { font-size: .62rem; letter-spacing: .06em; }
 }
 
-/* ══════════════════════════════
-   TABLET — 601px to 900px
-══════════════════════════════ */
 @media (min-width: 601px) and (max-width: 900px) {
     .content { padding: 1.5rem 1.2rem 2rem; }
     .info-section { grid-template-columns: repeat(3, 1fr); }
 }
 
-/* ══════════════════════════════
-   PC — min 901px
-══════════════════════════════ */
 @media (min-width: 901px) {
     .content { padding: 2rem 2rem 3rem; }
     .hero { padding: 3rem 2rem 2.2rem; }
     .info-section { padding: 2rem 2rem 1.8rem; gap: 16px; }
 }
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
+
+# ── Processing Functions ──
+
+
+def build_pdf_bytes(uploaded_files, copies):
+    """Generates A4 PDF using ReportLab."""
+    usable_w = PAGE_W - 2 * MARGIN - (PHOTOS_PER_ROW - 1) * GAP
+    adj_w = usable_w / PHOTOS_PER_ROW
+
+    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp_pdf:
+        pdf_path = tmp_pdf.name
+
+    c = canvas.Canvas(pdf_path, pagesize=A4)
+    x_s, y_s = MARGIN, PAGE_H - MARGIN
+    x, y = x_s, y_s
+    row_max_h = 0
+    photo_in_row = 0
+    tmp_files = []
+
+    for uf in uploaded_files:
+        img = Image.open(uf).convert("RGB")
+        ow, oh = img.size
+        scale = min(adj_w / ow, MAX_H / oh, 1)
+        fw, fh = int(ow * scale), int(oh * scale)
+
+        img_b = ImageOps.expand(img, border=BORDER, fill="black")
+        tf = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+        tf.close()
+        img_b.save(tf.name, format="PNG", dpi=(300, 300))
+        tmp_files.append(tf.name)
+
+        fname = os.path.splitext(uf.name)[0]
+
+        for _ in range(int(copies)):
+            if y - fh < MARGIN:
+                c.showPage()
+                x, y = x_s, y_s
+                row_max_h = 0
+                photo_in_row = 0
+
+            c.drawImage(
+                tf.name,
+                x,
+                y - fh,
+                fw,
+                fh,
+                preserveAspectRatio=True,
+                mask=None,
+            )
+            c.setFont("Helvetica", 6)
+            c.setFillColorRGB(0, 0, 0)
+            c.drawString(x + 3, y - fh + 3, fname[:20])
+
+            row_max_h = max(row_max_h, fh)
+            photo_in_row += 1
+            x += fw + GAP
+
+            if photo_in_row >= PHOTOS_PER_ROW:
+                x, y = x_s, y - row_max_h - GAP
+                row_max_h = 0
+                photo_in_row = 0
+
+    c.save()
+
+    for f in tmp_files:
+        if os.path.exists(f):
+            os.remove(f)
+
+    with open(pdf_path, "rb") as f:
+        pdf_data = f.read()
+    os.remove(pdf_path)
+
+    return pdf_data
+
+
+def build_pil_pages(uploaded_files, copies):
+    """Generates 300 DPI PIL Image pages matching A4 layout."""
+    DPI = 300
+    SCALE = DPI / 72.0  # Convert ReportLab points to pixels
+
+    PAGE_W_PX = int(PAGE_W * SCALE)
+    PAGE_H_PX = int(PAGE_H * SCALE)
+    MARGIN_PX = int(MARGIN * SCALE)
+    GAP_PX = int(GAP * SCALE)
+    BORDER_PX = max(1, int(BORDER * SCALE))
+    MAX_H_PX = int(MAX_H * SCALE)
+
+    usable_w = PAGE_W_PX - 2 * MARGIN_PX - (PHOTOS_PER_ROW - 1) * GAP_PX
+    adj_w = usable_w / PHOTOS_PER_ROW
+
+    pages = []
+
+    def create_new_page():
+        return Image.new("RGB", (PAGE_W_PX, PAGE_H_PX), "white")
+
+    current_page = create_new_page()
+    draw = ImageDraw.Draw(current_page)
+
+    x_s, y_s = MARGIN_PX, MARGIN_PX
+    x, y = x_s, y_s
+    row_max_h = 0
+    photo_in_row = 0
+
+    try:
+        font = ImageFont.truetype("arial.ttf", int(7 * SCALE))
+    except OSError:
+        font = ImageFont.load_default()
+
+    for uf in uploaded_files:
+        uf.seek(0)
+        img = Image.open(uf).convert("RGB")
+        ow, oh = img.size
+
+        scale = min(adj_w / ow, MAX_H_PX / oh, 1.0)
+        fw, fh = int(ow * scale), int(oh * scale)
+
+        img_b = ImageOps.expand(img, border=BORDER_PX, fill="black")
+        img_b = img_b.resize((fw, fh), Image.Resampling.LANCZOS)
+        fname = os.path.splitext(uf.name)[0][:20]
+
+        for _ in range(int(copies)):
+            if y + fh > PAGE_H_PX - MARGIN_PX:
+                pages.append(current_page)
+                current_page = create_new_page()
+                draw = ImageDraw.Draw(current_page)
+                x, y = x_s, y_s
+                row_max_h = 0
+                photo_in_row = 0
+
+            current_page.paste(img_b, (x, y))
+            draw.text(
+                (x + int(4 * SCALE), y + fh - int(10 * SCALE)),
+                fname,
+                fill="black",
+                font=font,
+            )
+
+            row_max_h = max(row_max_h, fh)
+            photo_in_row += 1
+            x += fw + GAP_PX
+
+            if photo_in_row >= PHOTOS_PER_ROW:
+                x, y = x_s, y + row_max_h + GAP_PX
+                row_max_h = 0
+                photo_in_row = 0
+
+    pages.append(current_page)
+    return pages
+
+
+def build_docx_bytes(pil_pages):
+    """Embeds A4 PIL images into MS Word Document with exact margins."""
+    doc = Document()
+    for section in doc.sections:
+        section.page_width = Inches(8.27)
+        section.page_height = Inches(11.69)
+        section.top_margin = Inches(0.2)
+        section.bottom_margin = Inches(0.2)
+        section.left_margin = Inches(0.2)
+        section.right_margin = Inches(0.2)
+
+    for i, page_img in enumerate(pil_pages):
+        if i > 0:
+            doc.add_page_break()
+
+        img_io = io.BytesIO()
+        page_img.save(img_io, format="JPEG", quality=95)
+        img_io.seek(0)
+        doc.add_picture(img_io, width=Inches(7.87))
+
+    doc_io = io.BytesIO()
+    doc.save(doc_io)
+    return doc_io.getvalue()
+
 
 # ── Hero ──
-st.markdown("""
+st.markdown(
+    """
 <div class="hero">
     <div class="hero-icon">📷</div>
     <h1>Photo<span>Pass</span> Pro</h1>
-    <p>Multiple logon ki photos ek saath A4 PDF mein arrange karo!</p>
+    <p>Multiple logon ki photos ek saath A4 Sheet (PDF, JPG, WORD) mein arrange karo!</p>
     <div class="steps-row">
         <div class="step-pill"><span class="sn">1</span><span class="st">Upload Photos</span></div>
         <div class="step-pill"><span class="sn">2</span><span class="st">Copies Chuno</span></div>
-        <div class="step-pill"><span class="sn">3</span><span class="st">PDF Banao</span></div>
-        <div class="step-pill"><span class="sn">4</span><span class="st">Download Karo</span></div>
+        <div class="step-pill"><span class="sn">3</span><span class="st">Generate Karo</span></div>
+        <div class="step-pill"><span class="sn">4</span><span class="st">Direct Download</span></div>
     </div>
 </div>
 <div class="content">
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 # ── Upload ──
-st.markdown('<span class="sec-lbl">📁 Photos Upload Karo</span>', unsafe_allow_html=True)
+st.markdown(
+    '<span class="sec-lbl">📁 Photos Upload Karo</span>', unsafe_allow_html=True
+)
 uploaded_files = st.file_uploader(
     "JPG, JPEG ya PNG — ek ya zyada photos chunno",
     type=["jpg", "jpeg", "png"],
     accept_multiple_files=True,
-    label_visibility="collapsed"
+    label_visibility="collapsed",
 )
 
 st.markdown("<div style='height:.8rem'></div>", unsafe_allow_html=True)
 
-# ── Copies ──
-st.markdown('<span class="sec-lbl">🔢 Har Photo Ki Copies</span>', unsafe_allow_html=True)
+# ── Copies Input ──
+st.markdown(
+    '<span class="sec-lbl">🔢 Har Photo Ki Copies</span>', unsafe_allow_html=True
+)
 copies = st.number_input(
-    "copies", min_value=1, max_value=20, value=2, step=1,
-    label_visibility="collapsed"
+    "copies",
+    min_value=1,
+    max_value=20,
+    value=2,
+    step=1,
+    label_visibility="collapsed",
 )
 
 # ── Preview ──
 if uploaded_files:
-    st.markdown(f"""
+    st.markdown(
+        f"""
     <div style="background:#e0f7fa;border:1.5px solid #80deea;border-radius:10px;
     padding:.75rem 1rem;margin:.8rem 0;color:#006064;font-size:.88rem;font-weight:700">
         ✅ &nbsp; {len(uploaded_files)} photo(s) select ki gayi hain
     </div>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
 
     num_cols = min(len(uploaded_files), 4)
     cols = st.columns(num_cols)
     for i, f in enumerate(uploaded_files):
         with cols[i % num_cols]:
-            st.image(f, use_container_width=True, caption=f.name.split(".")[0][:8])
+            st.image(
+                f, use_container_width=True, caption=f.name.split(".")[0][:8]
+            )
 
 st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
 
-# ── Generate Button ──
-if st.button("🖨️   PDF Generate Karo"):
+# ── Main Generate Action ──
+if st.button("⚡ Files Process & Generate Karo"):
     if not uploaded_files:
         st.error("❌ Pehle photos upload karo!")
     else:
-        total = len(uploaded_files) + 3
         prog = st.progress(0)
         status = st.empty()
-        step = [0]
 
-        def adv(msg, n=1):
-            step[0] += n
-            prog.progress(min(int(step[0]/total*100), 95), text=msg)
+        def update_prog(p, msg):
+            prog.progress(p, text=msg)
             status.markdown(
                 f'<p style="text-align:center;color:#00838f;font-size:.82rem;'
                 f'font-weight:600;margin-top:.3rem">{msg}</p>',
-                unsafe_allow_html=True)
+                unsafe_allow_html=True,
+            )
 
-        adv("📐 PDF canvas tayar ho raha hai...")
+        update_prog(20, "📐 PDF layout tayar ho raha hai...")
+        pdf_bytes = build_pdf_bytes(uploaded_files, copies)
 
-        usable_w = PAGE_W - 2*MARGIN - (PHOTOS_PER_ROW-1)*GAP
-        adj_w = usable_w / PHOTOS_PER_ROW
+        update_prog(60, "🖼️ High-Res Image (JPG) layout ban raha hai...")
+        pil_pages = build_pil_pages(uploaded_files, copies)
 
-        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp_pdf:
-            pdf_path = tmp_pdf.name
+        update_prog(85, "📝 Word Document (.docx) generate ho raha hai...")
+        docx_bytes = build_docx_bytes(pil_pages)
 
-        c = canvas.Canvas(pdf_path, pagesize=A4)
-        x_s, y_s = MARGIN, PAGE_H - MARGIN
-        x, y = x_s, y_s
-        row_max_h = 0
-        photo_in_row = 0
-        tmp_files = []
-
-        for idx, uf in enumerate(uploaded_files):
-            adv(f"🖼️ Photo {idx+1}/{len(uploaded_files)} process ho rahi hai...")
-
-            img = Image.open(uf).convert("RGB")
-            ow, oh = img.size
-            scale = min(adj_w/ow, MAX_H/oh, 1)
-            fw, fh = int(ow*scale), int(oh*scale)
-
-            img_b = ImageOps.expand(img, border=BORDER, fill="black")
-            tf = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
-            tf.close()
-            img_b.save(tf.name, format="PNG", dpi=(300, 300))
-            tmp_files.append(tf.name)
-
-            fname = os.path.splitext(uf.name)[0]
-
-            for _ in range(int(copies)):
-                if y - fh < MARGIN:
-                    c.showPage()
-                    x, y = x_s, y_s
-                    row_max_h = 0
-                    photo_in_row = 0
-
-                c.drawImage(tf.name, x, y-fh, fw, fh, preserveAspectRatio=True, mask=None)
-                c.setFont("Helvetica", 6)
-                c.setFillColorRGB(0, 0, 0)
-                c.drawString(x+3, y-fh+3, fname[:20])
-
-                row_max_h = max(row_max_h, fh)
-                photo_in_row += 1
-                x += fw + GAP
-
-                if photo_in_row >= PHOTOS_PER_ROW:
-                    x, y = x_s, y - row_max_h - GAP
-                    row_max_h = 0
-                    photo_in_row = 0
-
-        adv("💾 PDF save ho raha hai...", n=1)
-        c.save()
-
-        for f in tmp_files:
-            os.remove(f)
-        with open(pdf_path, "rb") as f:
-            pdf_data = f.read()
-        os.remove(pdf_path)
-
-        prog.progress(100, text="✅ PDF Ready!")
+        update_prog(100, "✅ Sabhi Formats Ready!")
         status.empty()
 
-        st.markdown("""
+        st.markdown(
+            """
         <div style="background:#e0f7fa;border:2px solid #00bcd4;border-radius:12px;
         padding:.9rem 1rem;text-align:center;color:#006064;font-size:.95rem;
         font-weight:700;margin:1rem 0">
-            🎉 PDF ready hai — print ke liye bilkul taiyar!
+            🎉 Sabhi formats tayar hain! Apni pasand ka file format neeche se download karein:
         </div>
-        """, unsafe_allow_html=True)
-
-        st.download_button(
-            label="⬇️   PDF Download Karo",
-            data=pdf_data,
-            file_name="passport_photos.pdf",
-            mime="application/pdf"
+        """,
+            unsafe_allow_html=True,
         )
+
+        # ── SEPARATE DOWNLOAD BUTTONS ──
+        st.markdown(
+            '<span class="sec-lbl" style="text-align:center; font-size:0.85rem;">⬇️ Download Buttons</span>',
+            unsafe_allow_html=True,
+        )
+
+        col1, col2, col3 = st.columns(3)
+
+        # 1. PDF Download
+        with col1:
+            st.download_button(
+                label="📄 PDF Sheet",
+                data=pdf_bytes,
+                file_name="passport_photos.pdf",
+                mime="application/pdf",
+                use_container_width=True,
+            )
+
+        # 2. JPG Download (Page wise if multiple pages)
+        with col2:
+            if len(pil_pages) == 1:
+                img_byte_arr = io.BytesIO()
+                pil_pages[0].save(img_byte_arr, format="JPEG", quality=95)
+                st.download_button(
+                    label="🖼️ JPG Image",
+                    data=img_byte_arr.getvalue(),
+                    file_name="passport_photos.jpg",
+                    mime="image/jpeg",
+                    use_container_width=True,
+                )
+            else:
+                for idx, page_img in enumerate(pil_pages):
+                    img_byte_arr = io.BytesIO()
+                    page_img.save(img_byte_arr, format="JPEG", quality=95)
+                    st.download_button(
+                        label=f"🖼️ JPG (P. {idx+1})",
+                        data=img_byte_arr.getvalue(),
+                        file_name=f"passport_photos_page_{idx+1}.jpg",
+                        mime="image/jpeg",
+                        key=f"jpg_btn_{idx}",
+                        use_container_width=True,
+                    )
+
+        # 3. Word Document Download
+        with col3:
+            st.download_button(
+                label="📝 Word Document",
+                data=docx_bytes,
+                file_name="passport_photos.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                use_container_width=True,
+            )
 
 st.markdown("</div>", unsafe_allow_html=True)
 
 # ── Info + Footer ──
-st.markdown("""
+st.markdown(
+    """
 <div class="info-section">
     <div class="info-col">
         <div class="info-icon-wrap">⚡</div>
@@ -496,8 +679,8 @@ st.markdown("""
     <div class="info-col">
         <div class="info-icon-wrap">🖨️</div>
         <div>
-            <h4>A4 PDF Ready</h4>
-            <p>Print ke liye bilkul taiyar</p>
+            <h4>Multi-Format</h4>
+            <p>PDF, JPG & Word Document Ready</p>
         </div>
     </div>
     <div class="info-col">
@@ -511,4 +694,6 @@ st.markdown("""
 <div class="footer-bar">
     <p>PHOTOPASS PRO &nbsp;·&nbsp; FREE TO USE &nbsp;·&nbsp; NO SIGNUP REQUIRED</p>
 </div>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)

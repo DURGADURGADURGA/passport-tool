@@ -360,7 +360,7 @@ def get_pil_font(size):
 # ── Processing Functions ──
 
 def build_pdf_bytes(uploaded_files, copies):
-    """Generates A4 PDF using ReportLab."""
+    """Generates A4 PDF using ReportLab with dynamic text color based on background brightness."""
     usable_w = PAGE_W - 2 * MARGIN - (PHOTOS_PER_ROW - 1) * GAP
     adj_w = usable_w / PHOTOS_PER_ROW
 
@@ -389,6 +389,13 @@ def build_pdf_bytes(uploaded_files, copies):
 
         fname = os.path.splitext(uf.name)[0]
 
+        # Calculate brightness in bottom-left corner region
+        crop_w = min(img_b.width, int(fw * 0.6))
+        crop_h = min(img_b.height, int(fh * 0.2))
+        crop_area = img_b.crop((0, img_b.height - crop_h, crop_w, img_b.height)).convert("L")
+        pixels = list(crop_area.getdata())
+        avg_brightness = sum(pixels) / max(1, len(pixels))
+
         for _ in range(int(copies)):
             if y - fh < MARGIN:
                 c.showPage()
@@ -406,8 +413,13 @@ def build_pdf_bytes(uploaded_files, copies):
                 mask=None,
             )
             c.setFont("Helvetica-Bold", 7)
-            c.setFillColorRGB(0, 0, 0)
-            # Bottom-left corner text placement
+            
+            # Auto-switch text color: WHITE for dark backgrounds, BLACK for light backgrounds
+            if avg_brightness < 128:
+                c.setFillColorRGB(1, 1, 1)  # White
+            else:
+                c.setFillColorRGB(0, 0, 0)  # Black
+
             c.drawString(x + 2, y - fh + 2, fname[:20])
 
             row_max_h = max(row_max_h, fh)
@@ -433,7 +445,7 @@ def build_pdf_bytes(uploaded_files, copies):
 
 
 def build_pil_pages(uploaded_files, copies):
-    """Generates High-Res 300 DPI PIL Image pages matching A4 layout."""
+    """Generates High-Res 300 DPI PIL Image pages with dynamic contrast text."""
     DPI = 300
     SCALE = DPI / 72.0  # Convert points to pixels
 
@@ -460,7 +472,6 @@ def build_pil_pages(uploaded_files, copies):
     row_max_h = 0
     photo_in_row = 0
 
-    # High quality dynamic scaled font
     font_size_px = int(7.5 * SCALE)
     font = get_pil_font(font_size_px)
 
@@ -472,11 +483,20 @@ def build_pil_pages(uploaded_files, copies):
         scale = min(adj_w / ow, MAX_H_PX / oh, 1.0)
         fw, fh = int(ow * scale), int(oh * scale)
 
-        # Resize image cleanly first, then add crisp border
         img_resized = img.resize((fw - 2 * BORDER_PX, fh - 2 * BORDER_PX), Image.Resampling.LANCZOS)
         img_b = ImageOps.expand(img_resized, border=BORDER_PX, fill="black")
 
         fname = os.path.splitext(uf.name)[0][:20]
+
+        # Calculate brightness in bottom-left corner region
+        crop_w = min(img_b.width, int(fw * 0.6))
+        crop_h = min(img_b.height, int(fh * 0.2))
+        crop_area = img_b.crop((0, img_b.height - crop_h, crop_w, img_b.height)).convert("L")
+        pixels = list(crop_area.getdata())
+        avg_brightness = sum(pixels) / max(1, len(pixels))
+
+        # Auto-switch text color
+        text_color = (255, 255, 255) if avg_brightness < 128 else (0, 0, 0)
 
         for _ in range(int(copies)):
             if y + fh > PAGE_H_PX - MARGIN_PX:
@@ -489,13 +509,13 @@ def build_pil_pages(uploaded_files, copies):
 
             current_page.paste(img_b, (x, y))
             
-            # Bottom-left corner text placement
             text_x = x + int(2 * SCALE)
             text_y = y + fh - int(9 * SCALE)
+            
             draw.text(
                 (text_x, text_y),
                 fname,
-                fill="black",
+                fill=text_color,
                 font=font,
             )
 
@@ -664,7 +684,7 @@ if st.session_state.get("processed", False) and uploaded_files:
             use_container_width=True,
         )
 
-    # 2. JPG Download (Ultra HD 300 DPI Export)
+    # 2. JPG Download
     with col2:
         pil_pages = st.session_state.pil_pages
         if len(pil_pages) == 1:

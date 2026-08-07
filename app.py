@@ -337,6 +337,26 @@ if "processed" not in st.session_state:
     st.session_state.pil_pages = []
     st.session_state.docx_bytes = None
 
+# ── Helper for Robust Font Loading ──
+def get_pil_font(size):
+    """Loads a sharp TrueType font across Windows, Mac, Linux, and Cloud environments."""
+    font_names = [
+        "arial.ttf",
+        "DejaVuSans.ttf",
+        "LiberationSans-Regular.ttf",
+        "FreeSans.ttf",
+        "Helvetica.ttf"
+    ]
+    for fn in font_names:
+        try:
+            return ImageFont.truetype(fn, size)
+        except OSError:
+            continue
+    try:
+        return ImageFont.load_default(size=size)
+    except TypeError:
+        return ImageFont.load_default()
+
 # ── Processing Functions ──
 
 def build_pdf_bytes(uploaded_files, copies):
@@ -385,9 +405,9 @@ def build_pdf_bytes(uploaded_files, copies):
                 preserveAspectRatio=True,
                 mask=None,
             )
-            c.setFont("Helvetica", 6)
+            c.setFont("Helvetica-Bold", 7)
             c.setFillColorRGB(0, 0, 0)
-            c.drawString(x + 3, y - fh + 3, fname[:20])
+            c.drawString(x + 4, y - fh + 4, fname[:20])
 
             row_max_h = max(row_max_h, fh)
             photo_in_row += 1
@@ -412,9 +432,9 @@ def build_pdf_bytes(uploaded_files, copies):
 
 
 def build_pil_pages(uploaded_files, copies):
-    """Generates 300 DPI PIL Image pages matching A4 layout."""
+    """Generates High-Res 300 DPI PIL Image pages matching A4 layout."""
     DPI = 300
-    SCALE = DPI / 72.0  # Convert ReportLab points to pixels
+    SCALE = DPI / 72.0  # Convert points to pixels
 
     PAGE_W_PX = int(PAGE_W * SCALE)
     PAGE_H_PX = int(PAGE_H * SCALE)
@@ -439,10 +459,9 @@ def build_pil_pages(uploaded_files, copies):
     row_max_h = 0
     photo_in_row = 0
 
-    try:
-        font = ImageFont.truetype("arial.ttf", int(7 * SCALE))
-    except OSError:
-        font = ImageFont.load_default()
+    # High quality dynamic scaled font
+    font_size_px = int(8 * SCALE)
+    font = get_pil_font(font_size_px)
 
     for uf in uploaded_files:
         uf.seek(0)
@@ -452,8 +471,10 @@ def build_pil_pages(uploaded_files, copies):
         scale = min(adj_w / ow, MAX_H_PX / oh, 1.0)
         fw, fh = int(ow * scale), int(oh * scale)
 
-        img_b = ImageOps.expand(img, border=BORDER_PX, fill="black")
-        img_b = img_b.resize((fw, fh), Image.Resampling.LANCZOS)
+        # Resize image cleanly first, then add crisp border
+        img_resized = img.resize((fw - 2 * BORDER_PX, fh - 2 * BORDER_PX), Image.Resampling.LANCZOS)
+        img_b = ImageOps.expand(img_resized, border=BORDER_PX, fill="black")
+
         fname = os.path.splitext(uf.name)[0][:20]
 
         for _ in range(int(copies)):
@@ -466,8 +487,12 @@ def build_pil_pages(uploaded_files, copies):
                 photo_in_row = 0
 
             current_page.paste(img_b, (x, y))
+            
+            # Text position matching PDF exact offset
+            text_x = x + int(4 * SCALE)
+            text_y = y + fh - int(12 * SCALE)
             draw.text(
-                (x + int(4 * SCALE), y + fh - int(10 * SCALE)),
+                (text_x, text_y),
                 fname,
                 fill="black",
                 font=font,
@@ -502,7 +527,7 @@ def build_docx_bytes(pil_pages):
             doc.add_page_break()
 
         img_io = io.BytesIO()
-        page_img.save(img_io, format="JPEG", quality=95)
+        page_img.save(img_io, format="JPEG", quality=100, subsampling=0, dpi=(300, 300))
         img_io.seek(0)
         doc.add_picture(img_io, width=Inches(7.87))
 
@@ -638,12 +663,12 @@ if st.session_state.get("processed", False) and uploaded_files:
             use_container_width=True,
         )
 
-    # 2. JPG Download (Page wise if multiple pages)
+    # 2. JPG Download (Ultra HD 300 DPI Export)
     with col2:
         pil_pages = st.session_state.pil_pages
         if len(pil_pages) == 1:
             img_byte_arr = io.BytesIO()
-            pil_pages[0].save(img_byte_arr, format="JPEG", quality=95)
+            pil_pages[0].save(img_byte_arr, format="JPEG", quality=100, subsampling=0, dpi=(300, 300))
             st.download_button(
                 label="🖼️ JPG Image",
                 data=img_byte_arr.getvalue(),
@@ -654,7 +679,7 @@ if st.session_state.get("processed", False) and uploaded_files:
         else:
             for idx, page_img in enumerate(pil_pages):
                 img_byte_arr = io.BytesIO()
-                page_img.save(img_byte_arr, format="JPEG", quality=95)
+                page_img.save(img_byte_arr, format="JPEG", quality=100, subsampling=0, dpi=(300, 300))
                 st.download_button(
                     label=f"🖼️ JPG (P. {idx+1})",
                     data=img_byte_arr.getvalue(),

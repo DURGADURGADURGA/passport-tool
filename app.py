@@ -10,7 +10,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 import streamlit as st
 
-# Rembg AI Background removal check
+# Rembg AI Background removal import check
 try:
     from rembg import remove
     REMBG_AVAILABLE = True
@@ -20,7 +20,7 @@ except ImportError:
 # ================= CONSTANTS =================
 CM_TO_PT = 28.35
 PAPER_SIZES = {
-    "A4 Sheet": (A4[0], A4[1], 25, 6),             # (W, H, Margin, Gap)
+    "A4 Sheet": (A4[0], A4[1], 25, 6),             # (W, H, Margin, Gap in PT)
     "4x6 Photo Paper (4R)": (4 * 72, 6 * 72, 12, 4) # (288pt, 432pt, Margin, Gap)
 }
 
@@ -58,7 +58,7 @@ html, body, [class*="css"] {
 .hero {
     background: #fff;
     border-bottom: 3px solid #00bcd4;
-    padding: 2.5rem 1.5rem 2rem;
+    padding: 2.2rem 1.2rem 1.8rem;
     text-align: center;
 }
 .hero-icon {
@@ -68,6 +68,7 @@ html, body, [class*="css"] {
     display: flex; align-items: center; justify-content: center;
     margin: 0 auto .8rem;
     font-size: 28px;
+    color: white;
 }
 .hero h1 {
     font-size: clamp(1.6rem, 5vw, 2.4rem);
@@ -100,11 +101,14 @@ html, body, [class*="css"] {
     font-weight: 800 !important; text-transform: uppercase !important;
     box-shadow: 0 4px 14px rgba(0,188,212,.35) !important; min-height: 52px !important;
 }
+.stButton > button:hover { background: #0097a7 !important; }
 
 [data-testid="stDownloadButton"] button {
     width: 100% !important; background: #00897b !important; color: #fff !important;
     border: none !important; border-radius: 10px !important; min-height: 48px !important;
+    font-weight: 800 !important;
 }
+[data-testid="stDownloadButton"] button:hover { background: #00695c !important; }
 
 .option-card {
     background: #fff; border: 1.5px solid #b2ebf2; border-radius: 12px;
@@ -140,11 +144,11 @@ def hex_to_rgb(hex_str):
     return tuple(int(hex_str[i:i+2], 16) for i in (0, 2, 4))
 
 def process_single_image(uf, bg_option, custom_bg_color, add_dop, dop_date):
-    """Processes image and draws filename + DOP directly on photo with Smart Auto Contrast."""
+    """Clean Background Replacement + Direct Photo Text Drawing with Smart Contrast & Outline."""
     uf.seek(0)
     img = Image.open(uf).convert("RGB")
     
-    # 1. AI Background Removal/Change
+    # 1. AI Background Change
     if bg_option != "Original Background":
         if REMBG_AVAILABLE:
             img_rgba = remove(img, alpha_matting=True, alpha_matting_foreground_threshold=240)
@@ -161,7 +165,7 @@ def process_single_image(uf, bg_option, custom_bg_color, add_dop, dop_date):
             bg_img.paste(img_rgba, (0, 0), img_rgba)
             img = bg_img.convert("RGB")
 
-    # 2. Add FileName + DOP Text Directly on Photo
+    # 2. Add File Name + DOP Date Directly on Photo
     w, h = img.size
     file_stem = os.path.splitext(uf.name)[0]
     
@@ -170,30 +174,32 @@ def process_single_image(uf, bg_option, custom_bg_color, add_dop, dop_date):
     else:
         label = file_stem
 
-    # Auto-Calculate Brightness at Photo Bottom-Left for Contrast Text Color
-    sample_box = (0, int(h * 0.80), int(w * 0.85), h)
+    # Auto Brightness Calculation at Bottom Area for Text Contrast
+    sample_box = (0, int(h * 0.82), int(w * 0.90), h)
     crop_area = img.crop(sample_box).convert("L")
     pixels = list(crop_area.getdata())
     avg_brightness = sum(pixels) / max(1, len(pixels))
 
-    # Smart Contrast Color: Dark shirt = White Text | Light shirt = Black Text
+    # Smart Contrast Settings:
+    # Dark Shirt = White Text with Black Outline
+    # Light Shirt = Black Text with White Outline
     if avg_brightness < 128:
         text_color = (255, 255, 255)
-        stroke_color = (0, 0, 0) # Black outline for 100% visibility
+        stroke_color = (0, 0, 0)
     else:
         text_color = (0, 0, 0)
-        stroke_color = (255, 255, 255) # White outline for 100% visibility
+        stroke_color = (255, 255, 255)
 
     draw = ImageDraw.Draw(img)
-    font_size = max(11, int(h * 0.042))
+    font_size = max(11, int(h * 0.045))
     font = get_pil_font(font_size)
 
     # Position at bottom-left corner on photo
     text_x = int(w * 0.04)
-    text_y = h - int(h * 0.07)
+    text_y = h - int(h * 0.08)
 
-    # Draw text with stroke for 100% guaranteed visibility
-    draw.text((text_x, text_y), label, fill=text_color, font=font, stroke_width=1, stroke_fill=stroke_color)
+    # Draw text with 2px stroke outline so it's 100% visible on any background
+    draw.text((text_x, text_y), label, fill=text_color, font=font, stroke_width=2, stroke_fill=stroke_color)
 
     return img
 
@@ -349,7 +355,7 @@ st.markdown(
 <div class="hero">
     <div class="hero-icon">📷</div>
     <h1>Photo<span>Pass</span> Pro</h1>
-    <p>File Name + DOP Date Smart Contrast Ke Saath Generate Karein</p>
+    <p>File Name + DOP Date Smart Auto-Contrast Ke Saath Generate Karein</p>
 </div>
 <div class="content">
 """,
@@ -419,7 +425,7 @@ if st.button("⚡ Process & Generate Files"):
             uploaded_files, copies, paper_choice, preset_choice, bg_option, custom_bg_color, add_dop, dop_date
         )
 
-        update_prog(70, "🖼️ Processing JPG...")
+        update_prog(70, "🖼️ Processing High-Res JPG...")
         st.session_state.pil_pages = build_pil_pages(
             uploaded_files, copies, paper_choice, preset_choice, bg_option, custom_bg_color, add_dop, dop_date
         )

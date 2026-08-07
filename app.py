@@ -10,7 +10,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 import streamlit as st
 
-# Rembg AI Background removal import check
+# Rembg AI Background removal check
 try:
     from rembg import remove
     REMBG_AVAILABLE = True
@@ -46,72 +46,46 @@ st.markdown(
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800;900&display=swap');
 
-@keyframes fadeDown { from{opacity:0;transform:translateY(-16px)} to{opacity:1;transform:translateY(0)} }
-@keyframes pulse    { 0%,100%{box-shadow:0 0 0 0 rgba(0,188,212,.4)} 50%{box-shadow:0 0 0 10px rgba(0,188,212,0)} }
-@keyframes shimmer  { 0%{background-position:-400px 0} 100%{background-position:400px 0} }
-
 *, *::before, *::after { box-sizing: border-box; }
 html, body, [class*="css"] {
     font-family: 'Montserrat', sans-serif !important;
-    -webkit-text-size-adjust: 100%;
 }
 .stApp { background: #f0fafb; }
 #MainMenu, footer, header { visibility: hidden; }
 
 .block-container { padding: 0 !important; max-width: 100% !important; }
-.main > div { padding: 0 !important; }
 
 .hero {
     background: #fff;
     border-bottom: 3px solid #00bcd4;
     padding: 2.5rem 1.5rem 2rem;
     text-align: center;
-    animation: fadeDown .5s ease both;
-    width: 100%;
 }
 .hero-icon {
-    width: 70px; height: 70px;
+    width: 60px; height: 60px;
     background: #00bcd4;
     border-radius: 50%;
     display: flex; align-items: center; justify-content: center;
-    margin: 0 auto .9rem;
-    font-size: 30px;
-    animation: pulse 2.5s ease-in-out infinite;
+    margin: 0 auto .8rem;
+    font-size: 28px;
 }
 .hero h1 {
-    font-size: clamp(1.6rem, 5vw, 2.6rem);
+    font-size: clamp(1.6rem, 5vw, 2.4rem);
     font-weight: 900;
     color: #0d0d0d;
-    letter-spacing: -.02em;
-    margin-bottom: .4rem;
-    line-height: 1.1;
+    margin-bottom: .3rem;
 }
 .hero h1 span { color: #00bcd4; }
 .hero p {
     font-size: clamp(.85rem, 2.5vw, 1rem);
     font-weight: 600;
     color: #555;
-    margin-bottom: 1.2rem;
-    padding: 0 .5rem;
 }
-.steps-row {
-    display: flex; justify-content: center; gap: 6px; flex-wrap: wrap; padding: 0 .5rem;
-}
-.step-pill {
-    background: #e0f7fa; border-radius: 30px; padding: 6px 12px;
-    display: inline-flex; align-items: center; gap: 6px; margin-bottom: 4px;
-}
-.step-pill .sn {
-    background: #00bcd4; color: #fff; font-size: 10px; font-weight: 800;
-    width: 20px; height: 20px; border-radius: 50%;
-    display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
-}
-.step-pill .st { font-size: 11px; font-weight: 700; color: #007b8a; white-space: nowrap; }
 
 .content { max-width: 700px; margin: 0 auto; padding: 1.5rem 1rem 2rem; }
 
 .sec-lbl {
-    font-size: .72rem; font-weight: 800; letter-spacing: .1em;
+    font-size: .75rem; font-weight: 800; letter-spacing: .1em;
     text-transform: uppercase; color: #00838f; margin-bottom: .5rem; display: block;
 }
 
@@ -119,54 +93,24 @@ html, body, [class*="css"] {
     background: #fff !important; border: 2.5px dashed #00bcd4 !important;
     border-radius: 14px !important; padding: 1.5rem 1rem !important; width: 100% !important;
 }
-[data-testid="stFileUploader"]:hover { background: #e0f7fa !important; }
-
-[data-testid="stNumberInput"] input, [data-testid="stSelectbox"] select, [data-testid="stTextInput"] input {
-    background: #fff !important; border: 2px solid #b2ebf2 !important;
-    border-radius: 10px !important; font-family: 'Montserrat', sans-serif !important;
-    font-weight: 700 !important;
-}
 
 .stButton > button {
     width: 100% !important; background: #00bcd4 !important; color: #fff !important;
     border: none !important; border-radius: 12px !important; padding: .9rem 1rem !important;
-    font-family: 'Montserrat', sans-serif !important; font-size: clamp(.9rem, 2.5vw, 1rem) !important;
     font-weight: 800 !important; text-transform: uppercase !important;
     box-shadow: 0 4px 14px rgba(0,188,212,.35) !important; min-height: 52px !important;
 }
-.stButton > button:hover { background: #0097a7 !important; }
 
 [data-testid="stDownloadButton"] button {
     width: 100% !important; background: #00897b !important; color: #fff !important;
-    border: none !important; border-radius: 10px !important; padding: .8rem .8rem !important;
-    font-weight: 800 !important; text-transform: uppercase !important; min-height: 48px !important;
+    border: none !important; border-radius: 10px !important; min-height: 48px !important;
 }
-[data-testid="stDownloadButton"] button:hover { background: #00695c !important; }
-
-.info-section {
-    background: #e0f2f1; border-top: 3px solid #00bcd4; padding: 1.8rem 1rem 1.5rem;
-    margin-top: 2rem; display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; width: 100%;
-}
-.info-col { text-align: center; padding: 0 6px; }
-.info-icon-wrap {
-    width: 48px; height: 48px; background: #00bcd4; border-radius: 50%;
-    display: flex; align-items: center; justify-content: center; margin: 0 auto 8px; font-size: 20px;
-}
-.info-col h4 { font-size: .65rem; font-weight: 800; text-transform: uppercase; margin-bottom: 4px; }
-.info-col p { font-size: .68rem; color: #555; line-height: 1.5; }
-
-.footer-bar { background: #00bcd4; padding: 12px 16px; text-align: center; width: 100%; }
-.footer-bar p { font-size: .68rem; font-weight: 700; color: #fff; margin: 0; }
-.divider { height: 1px; background: #b2ebf2; margin: 1.2rem 0; }
 
 .option-card {
     background: #fff; border: 1.5px solid #b2ebf2; border-radius: 12px;
     padding: 1rem; margin-bottom: 1rem;
 }
-.student-card {
-    background: #f9fbfb; border: 1px solid #b2dfdb; border-radius: 8px;
-    padding: 8px; margin-bottom: 8px;
-}
+.divider { height: 1px; background: #b2ebf2; margin: 1.2rem 0; }
 </style>
 """,
     unsafe_allow_html=True,
@@ -195,49 +139,61 @@ def hex_to_rgb(hex_str):
     hex_str = hex_str.lstrip('#')
     return tuple(int(hex_str[i:i+2], 16) for i in (0, 2, 4))
 
-def process_single_image(uf, bg_option, custom_bg_color, add_name_date, c_name, p_date):
-    """Clean Background Removal + Student Specific Name/Date Strip."""
+def process_single_image(uf, bg_option, custom_bg_color, add_dop, dop_date):
+    """Processes image and draws filename + DOP directly on photo with Smart Auto Contrast."""
     uf.seek(0)
     img = Image.open(uf).convert("RGB")
     
-    # 1. Clean Background Change (AI feature with alpha_matting for sharp edges)
+    # 1. AI Background Removal/Change
     if bg_option != "Original Background":
         if REMBG_AVAILABLE:
-            # Alpha matting gives smooth & crisp hair/edge removal
             img_rgba = remove(img, alpha_matting=True, alpha_matting_foreground_threshold=240)
-            
             if bg_option == "Plain White":
                 fill_color = (255, 255, 255)
             elif bg_option == "Light Blue":
                 fill_color = (212, 230, 241)
             elif bg_option == "Red (Lal)":
                 fill_color = (235, 64, 52)
-            else: # Custom Selected
+            else:
                 fill_color = hex_to_rgb(custom_bg_color)
 
             bg_img = Image.new("RGBA", img_rgba.size, fill_color)
             bg_img.paste(img_rgba, (0, 0), img_rgba)
             img = bg_img.convert("RGB")
-        else:
-            st.warning("⚠️ `rembg` library install nahi hai. Original background use ho raha hai.")
 
-    # 2. Student Name & Date Strip
-    if add_name_date and (c_name or p_date):
-        w, h = img.size
-        strip_h = int(h * 0.18)
-        draw = ImageDraw.Draw(img)
-        draw.rectangle([0, h - strip_h, w, h], fill="white")
-        
-        font_size = max(10, int(strip_h * 0.35))
-        font = get_pil_font(font_size)
-        text_lines = []
-        if c_name:
-            text_lines.append(c_name.strip().upper())
-        if p_date:
-            text_lines.append(f"DOP: {p_date.strip()}")
-            
-        full_text = "\n".join(text_lines)
-        draw.multiline_text((w // 2, h - strip_h // 2), full_text, fill="black", font=font, anchor="mm", align="center")
+    # 2. Add FileName + DOP Text Directly on Photo
+    w, h = img.size
+    file_stem = os.path.splitext(uf.name)[0]
+    
+    if add_dop and dop_date:
+        label = f"{file_stem} DOP: {dop_date}"
+    else:
+        label = file_stem
+
+    # Auto-Calculate Brightness at Photo Bottom-Left for Contrast Text Color
+    sample_box = (0, int(h * 0.80), int(w * 0.85), h)
+    crop_area = img.crop(sample_box).convert("L")
+    pixels = list(crop_area.getdata())
+    avg_brightness = sum(pixels) / max(1, len(pixels))
+
+    # Smart Contrast Color: Dark shirt = White Text | Light shirt = Black Text
+    if avg_brightness < 128:
+        text_color = (255, 255, 255)
+        stroke_color = (0, 0, 0) # Black outline for 100% visibility
+    else:
+        text_color = (0, 0, 0)
+        stroke_color = (255, 255, 255) # White outline for 100% visibility
+
+    draw = ImageDraw.Draw(img)
+    font_size = max(11, int(h * 0.042))
+    font = get_pil_font(font_size)
+
+    # Position at bottom-left corner on photo
+    text_x = int(w * 0.04)
+    text_y = h - int(h * 0.07)
+
+    # Draw text with stroke for 100% guaranteed visibility
+    draw.text((text_x, text_y), label, fill=text_color, font=font, stroke_width=1, stroke_fill=stroke_color)
 
     return img
 
@@ -259,18 +215,7 @@ def calculate_grid_layout(paper_choice, preset_choice, img_size):
     photos_per_row = max(1, int((page_w - 2 * margin + gap) / (fw + gap)))
     return page_w, page_h, margin, gap, fw, fh, photos_per_row
 
-def resolve_text_color(text_color_choice, custom_text_color, avg_brightness):
-    if text_color_choice == "Auto (Smart Contrast)":
-        return (1.0, 1.0, 1.0) if avg_brightness < 128 else (0.0, 0.0, 0.0), (255, 255, 255) if avg_brightness < 128 else (0, 0, 0)
-    elif text_color_choice == "White (Safed)":
-        return (1.0, 1.0, 1.0), (255, 255, 255)
-    elif text_color_choice == "Black (Kala)":
-        return (0.0, 0.0, 0.0), (0, 0, 0)
-    else:
-        rgb = hex_to_rgb(custom_text_color)
-        return (rgb[0]/255.0, rgb[1]/255.0, rgb[2]/255.0), rgb
-
-def build_pdf_bytes(uploaded_files, copies, paper_choice, preset_choice, bg_option, custom_bg_color, add_name_date, student_details, text_color_choice, custom_text_color):
+def build_pdf_bytes(uploaded_files, copies, paper_choice, preset_choice, bg_option, custom_bg_color, add_dop, dop_date):
     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp_pdf:
         pdf_path = tmp_pdf.name
 
@@ -285,24 +230,13 @@ def build_pdf_bytes(uploaded_files, copies, paper_choice, preset_choice, bg_opti
     tmp_files = []
 
     for uf in uploaded_files:
-        s_info = student_details.get(uf.name, {"name": "", "date": ""})
-        img = process_single_image(uf, bg_option, custom_bg_color, add_name_date, s_info["name"], s_info["date"])
+        img = process_single_image(uf, bg_option, custom_bg_color, add_dop, dop_date)
         img_b = ImageOps.expand(img, border=BORDER, fill="black")
         
         tf = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
         tf.close()
         img_b.save(tf.name, format="PNG", dpi=(300, 300))
         tmp_files.append(tf.name)
-
-        fname = s_info["name"] if (add_name_date and s_info["name"]) else os.path.splitext(uf.name)[0]
-
-        crop_w = min(img_b.width, int(fw * 0.6))
-        crop_h = min(img_b.height, int(fh * 0.2))
-        crop_area = img_b.crop((0, img_b.height - crop_h, crop_w, img_b.height)).convert("L")
-        pixels = list(crop_area.getdata())
-        avg_brightness = sum(pixels) / max(1, len(pixels))
-
-        pdf_rgb, _ = resolve_text_color(text_color_choice, custom_text_color, avg_brightness)
 
         for _ in range(int(copies)):
             if y - fh < margin:
@@ -312,9 +246,6 @@ def build_pdf_bytes(uploaded_files, copies, paper_choice, preset_choice, bg_opti
                 photo_in_row = 0
 
             c.drawImage(tf.name, x, y - fh, fw, fh, preserveAspectRatio=True)
-            c.setFont("Helvetica-Bold", 7)
-            c.setFillColorRGB(pdf_rgb[0], pdf_rgb[1], pdf_rgb[2])
-            c.drawString(x + 2, y - fh + 2, fname[:20])
 
             row_max_h = max(row_max_h, fh)
             photo_in_row += 1
@@ -336,7 +267,7 @@ def build_pdf_bytes(uploaded_files, copies, paper_choice, preset_choice, bg_opti
 
     return pdf_data
 
-def build_pil_pages(uploaded_files, copies, paper_choice, preset_choice, bg_option, custom_bg_color, add_name_date, student_details, text_color_choice, custom_text_color):
+def build_pil_pages(uploaded_files, copies, paper_choice, preset_choice, bg_option, custom_bg_color, add_dop, dop_date):
     DPI = 300
     SCALE = DPI / 72.0
 
@@ -356,43 +287,26 @@ def build_pil_pages(uploaded_files, copies, paper_choice, preset_choice, bg_opti
         return Image.new("RGB", (PAGE_W_PX, PAGE_H_PX), "white")
 
     current_page = create_new_page()
-    draw = ImageDraw.Draw(current_page)
 
     x_s, y_s = MARGIN_PX, MARGIN_PX
     x, y = x_s, y_s
     row_max_h = 0
     photo_in_row = 0
 
-    font_size_px = int(7.5 * SCALE)
-    font = get_pil_font(font_size_px)
-
     for uf in uploaded_files:
-        s_info = student_details.get(uf.name, {"name": "", "date": ""})
-        img = process_single_image(uf, bg_option, custom_bg_color, add_name_date, s_info["name"], s_info["date"])
+        img = process_single_image(uf, bg_option, custom_bg_color, add_dop, dop_date)
         img_resized = img.resize((fw_px - 2 * BORDER_PX, fh_px - 2 * BORDER_PX), Image.Resampling.LANCZOS)
         img_b = ImageOps.expand(img_resized, border=BORDER_PX, fill="black")
-
-        fname = s_info["name"] if (add_name_date and s_info["name"]) else os.path.splitext(uf.name)[0]
-
-        crop_w = min(img_b.width, int(fw_px * 0.6))
-        crop_h = min(img_b.height, int(fh_px * 0.2))
-        crop_area = img_b.crop((0, img_b.height - crop_h, crop_w, img_b.height)).convert("L")
-        pixels = list(crop_area.getdata())
-        avg_brightness = sum(pixels) / max(1, len(pixels))
-
-        _, pil_rgb = resolve_text_color(text_color_choice, custom_text_color, avg_brightness)
 
         for _ in range(int(copies)):
             if y + fh_px > PAGE_H_PX - MARGIN_PX:
                 pages.append(current_page)
                 current_page = create_new_page()
-                draw = ImageDraw.Draw(current_page)
                 x, y = x_s, y_s
                 row_max_h = 0
                 photo_in_row = 0
 
             current_page.paste(img_b, (x, y))
-            draw.text((x + int(2 * SCALE), y + fh_px - int(9 * SCALE)), fname[:20], fill=pil_rgb, font=font)
 
             row_max_h = max(row_max_h, fh_px)
             photo_in_row += 1
@@ -410,20 +324,12 @@ def build_docx_bytes(pil_pages, paper_choice):
     doc = Document()
     for section in doc.sections:
         if "4x6" in paper_choice:
-            section.page_width = Inches(4.0)
-            section.page_height = Inches(6.0)
-            section.top_margin = Inches(0.15)
-            section.bottom_margin = Inches(0.15)
-            section.left_margin = Inches(0.15)
-            section.right_margin = Inches(0.15)
+            section.page_width, section.page_height = Inches(4.0), Inches(6.0)
+            section.top_margin = section.bottom_margin = section.left_margin = section.right_margin = Inches(0.15)
             img_w_in = 3.7
         else:
-            section.page_width = Inches(8.27)
-            section.page_height = Inches(11.69)
-            section.top_margin = Inches(0.2)
-            section.bottom_margin = Inches(0.2)
-            section.left_margin = Inches(0.2)
-            section.right_margin = Inches(0.2)
+            section.page_width, section.page_height = Inches(8.27), Inches(11.69)
+            section.top_margin = section.bottom_margin = section.left_margin = section.right_margin = Inches(0.2)
             img_w_in = 7.87
 
     for i, page_img in enumerate(pil_pages):
@@ -443,12 +349,7 @@ st.markdown(
 <div class="hero">
     <div class="hero-icon">📷</div>
     <h1>Photo<span>Pass</span> Pro</h1>
-    <p>Multiple logon ki photos ek saath (PDF, JPG, WORD) mein arrange karo!</p>
-    <div class="steps-row">
-        <div class="step-pill"><span class="sn">1</span><span class="st">Upload Photos</span></div>
-        <div class="step-pill"><span class="sn">2</span><span class="st">Set Details</span></div>
-        <div class="step-pill"><span class="sn">3</span><span class="st">Generate & Download</span></div>
-    </div>
+    <p>File Name + DOP Date Smart Contrast Ke Saath Generate Karein</p>
 </div>
 <div class="content">
 """,
@@ -458,7 +359,7 @@ st.markdown(
 # ── Upload ──
 st.markdown('<span class="sec-lbl">📁 Photos Upload Karo</span>', unsafe_allow_html=True)
 uploaded_files = st.file_uploader(
-    "JPG, JPEG ya PNG — ek ya zyada photos chunno",
+    "JPG, JPEG ya PNG photos chunno",
     type=["jpg", "jpeg", "png"],
     accept_multiple_files=True,
     label_visibility="collapsed",
@@ -466,8 +367,8 @@ uploaded_files = st.file_uploader(
 
 st.markdown("<div style='height:.8rem'></div>", unsafe_allow_html=True)
 
-# ── Settings & Controls ──
-st.markdown('<span class="sec-lbl">⚙️ Customization & Colors</span>', unsafe_allow_html=True)
+# ── Settings ──
+st.markdown('<span class="sec-lbl">⚙️ Settings & Options</span>', unsafe_allow_html=True)
 with st.container():
     st.markdown('<div class="option-card">', unsafe_allow_html=True)
     c1, c2 = st.columns(2)
@@ -480,69 +381,29 @@ with st.container():
     with c3:
         copies = st.number_input("🔢 Har Photo Ki Copies", min_value=1, max_value=30, value=2, step=1)
     with c4:
-        text_color_choice = st.selectbox("✍️ Text Color", ["Auto (Smart Contrast)", "White (Safed)", "Black (Kala)", "Custom Color"], index=0)
+        bg_option = st.selectbox("🎨 Background Color (AI)", ["Original Background", "Plain White", "Light Blue", "Red (Lal)", "Custom Color"], index=0)
 
-    custom_text_color = "#FFFFFF"
-    if text_color_choice == "Custom Color":
-        custom_text_color = st.color_picker("Text Color Select Karo", "#FFFFFF")
+    custom_bg_color = "#D4E6F1"
+    if bg_option == "Custom Color":
+        custom_bg_color = st.color_picker("Background Color Select Karo", "#D4E6F1")
 
     st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
 
-    c5, c6 = st.columns(2)
-    with c5:
-        bg_option = st.selectbox("🎨 Background Color (AI)", ["Original Background", "Plain White", "Light Blue", "Red (Lal)", "Custom Color"], index=0)
-    with c6:
-        custom_bg_color = "#D4E6F1"
-        if bg_option == "Custom Color":
-            custom_bg_color = st.color_picker("Background Color Select Karo", "#D4E6F1")
-
-    # Govt Forms Strip Toggle
-    add_name_date = st.checkbox("📝 Photo ke Niche Name & Date Strip Add Karein? (Govt Forms Special)")
-    st.markdown('</div>', unsafe_allow_html=True)
-
-# ── Multi-Student Dynamic Name/Date Box ──
-student_details = {}
-if uploaded_files:
-    if add_name_date:
-        st.markdown('<span class="sec-lbl">👥 Har Student Ka Name & Date (Individual)</span>', unsafe_allow_html=True)
-        st.markdown('<div class="option-card">', unsafe_allow_html=True)
-        today_str = datetime.date.today().strftime("%d/%m/%Y")
-        
-        for f in uploaded_files:
-            default_name = os.path.splitext(f.name)[0]
-            st.markdown(f'<div class="student-card"><b>🖼️ Photo:</b> {f.name}</div>', unsafe_allow_html=True)
-            col_n, col_d = st.columns(2)
-            with col_n:
-                s_name = st.text_input("Student Name", value=default_name, key=f"name_{f.name}")
-            with col_d:
-                s_date = st.text_input("Date of Photo (DOP)", value=today_str, key=f"date_{f.name}")
-            student_details[f.name] = {"name": s_name, "date": s_date}
-        st.markdown('</div>', unsafe_allow_html=True)
+    # DOP Section
+    add_dop = st.checkbox("📅 Photo Par DOP (Date of Photo) Add Karein?", value=True)
+    today_str = datetime.date.today().strftime("%d/%m/%Y")
+    
+    if add_dop:
+        dop_date = st.text_input("DOP Date Put Karein:", value=today_str)
     else:
-        for f in uploaded_files:
-            student_details[f.name] = {"name": os.path.splitext(f.name)[0], "date": ""}
+        dop_date = ""
 
-    # Photo Previews
-    st.markdown(
-        f"""
-    <div style="background:#e0f7fa;border:1.5px solid #80deea;border-radius:10px;
-    padding:.75rem 1rem;margin:.8rem 0;color:#006064;font-size:.88rem;font-weight:700">
-        ✅ &nbsp; {len(uploaded_files)} photo(s) selected
-    </div>
-    """,
-        unsafe_allow_html=True,
-    )
-
-    num_cols = min(len(uploaded_files), 4)
-    cols = st.columns(num_cols)
-    for i, f in enumerate(uploaded_files):
-        with cols[i % num_cols]:
-            st.image(f, use_container_width=True, caption=student_details[f.name]["name"][:12])
+    st.markdown('</div>', unsafe_allow_html=True)
 
 st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
 
-# ── Main Generate Action ──
-if st.button("⚡ Files Process & Generate Karo"):
+# ── Action Button ──
+if st.button("⚡ Process & Generate Files"):
     if not uploaded_files:
         st.error("❌ Pehle photos upload karo!")
         st.session_state.processed = False
@@ -552,120 +413,45 @@ if st.button("⚡ Files Process & Generate Karo"):
 
         def update_prog(p, msg):
             prog.progress(p, text=msg)
-            status.markdown(
-                f'<p style="text-align:center;color:#00838f;font-size:.82rem;font-weight:600;margin-top:.3rem">{msg}</p>',
-                unsafe_allow_html=True,
-            )
 
-        update_prog(20, "📐 PDF layout process ho raha hai...")
+        update_prog(30, "📐 Processing PDF...")
         st.session_state.pdf_bytes = build_pdf_bytes(
-            uploaded_files, copies, paper_choice, preset_choice,
-            bg_option, custom_bg_color, add_name_date, student_details,
-            text_color_choice, custom_text_color
+            uploaded_files, copies, paper_choice, preset_choice, bg_option, custom_bg_color, add_dop, dop_date
         )
 
-        update_prog(60, "🖼️ High-Res Image (JPG) layout ban raha hai...")
+        update_prog(70, "🖼️ Processing JPG...")
         st.session_state.pil_pages = build_pil_pages(
-            uploaded_files, copies, paper_choice, preset_choice,
-            bg_option, custom_bg_color, add_name_date, student_details,
-            text_color_choice, custom_text_color
+            uploaded_files, copies, paper_choice, preset_choice, bg_option, custom_bg_color, add_dop, dop_date
         )
 
-        update_prog(85, "📝 Word Document (.docx) generate ho raha hai...")
+        update_prog(90, "📝 Processing Word Document...")
         st.session_state.docx_bytes = build_docx_bytes(st.session_state.pil_pages, paper_choice)
 
-        update_prog(100, "✅ Sabhi Formats Ready!")
+        update_prog(100, "✅ Done!")
         status.empty()
         st.session_state.processed = True
 
-# ── DOWNLOAD BUTTONS ──
+# ── Download Buttons ──
 if st.session_state.get("processed", False) and uploaded_files:
-    st.markdown(
-        """
-    <div style="background:#e0f7fa;border:2px solid #00bcd4;border-radius:12px;
-    padding:.9rem 1rem;text-align:center;color:#006064;font-size:.95rem;font-weight:700;margin:1rem 0">
-        🎉 Sabhi formats tayar hain! Aap direct download kar sakte hain:
-    </div>
-    """,
-        unsafe_allow_html=True,
-    )
-
+    st.markdown("### 🎉 Download Files:")
     col1, col2, col3 = st.columns(3)
 
     with col1:
-        st.download_button(
-            label="📄 PDF Sheet",
-            data=st.session_state.pdf_bytes,
-            file_name="passport_photos.pdf",
-            mime="application/pdf",
-            use_container_width=True,
-        )
+        st.download_button("📄 PDF Sheet", st.session_state.pdf_bytes, "passport_photos.pdf", "application/pdf", use_container_width=True)
 
     with col2:
         pil_pages = st.session_state.pil_pages
         if len(pil_pages) == 1:
             img_byte_arr = io.BytesIO()
-            pil_pages[0].save(img_byte_arr, format="JPEG", quality=100, subsampling=0, dpi=(300, 300))
-            st.download_button(
-                label="🖼️ JPG Image",
-                data=img_byte_arr.getvalue(),
-                file_name="passport_photos.jpg",
-                mime="image/jpeg",
-                use_container_width=True,
-            )
+            pil_pages[0].save(img_byte_arr, format="JPEG", quality=100, dpi=(300, 300))
+            st.download_button("🖼️ JPG Image", img_byte_arr.getvalue(), "passport_photos.jpg", "image/jpeg", use_container_width=True)
         else:
             for idx, page_img in enumerate(pil_pages):
                 img_byte_arr = io.BytesIO()
-                page_img.save(img_byte_arr, format="JPEG", quality=100, subsampling=0, dpi=(300, 300))
-                st.download_button(
-                    label=f"🖼️ JPG (P. {idx+1})",
-                    data=img_byte_arr.getvalue(),
-                    file_name=f"passport_photos_page_{idx+1}.jpg",
-                    mime="image/jpeg",
-                    key=f"jpg_btn_{idx}",
-                    use_container_width=True,
-                )
+                page_img.save(img_byte_arr, format="JPEG", quality=100, dpi=(300, 300))
+                st.download_button(f"🖼️ JPG (Page {idx+1})", img_byte_arr.getvalue(), f"passport_photos_page_{idx+1}.jpg", "image/jpeg", key=f"jpg_btn_{idx}", use_container_width=True)
 
     with col3:
-        st.download_button(
-            label="📝 Word Document",
-            data=st.session_state.docx_bytes,
-            file_name="passport_photos.docx",
-            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            use_container_width=True,
-        )
+        st.download_button("📝 Word Document", st.session_state.docx_bytes, "passport_photos.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", use_container_width=True)
 
 st.markdown("</div>", unsafe_allow_html=True)
-
-# ── Info + Footer ──
-st.markdown(
-    """
-<div class="info-section">
-    <div class="info-col">
-        <div class="info-icon-wrap">⚡</div>
-        <div>
-            <h4>Fast & Free</h4>
-            <p>Koi signup nahi chahiye</p>
-        </div>
-    </div>
-    <div class="info-col">
-        <div class="info-icon-wrap">🖨️</div>
-        <div>
-            <h4>Multi-Format</h4>
-            <p>PDF, JPG & Word Document Ready</p>
-        </div>
-    </div>
-    <div class="info-col">
-        <div class="info-icon-wrap">🔒</div>
-        <div>
-            <h4>100% Secure</h4>
-            <p>Photos kahin save nahi hoti</p>
-        </div>
-    </div>
-</div>
-<div class="footer-bar">
-    <p>PHOTOPASS PRO &nbsp;·&nbsp; FREE TO USE &nbsp;·&nbsp; NO SIGNUP REQUIRED</p>
-</div>
-""",
-    unsafe_allow_html=True,
-)

@@ -407,7 +407,7 @@ def build_pdf_bytes(uploaded_files, copies):
             )
             c.setFont("Helvetica-Bold", 7)
             c.setFillColorRGB(0, 0, 0)
-            # Positioned lower and tighter to the left corner
+            # Bottom-left corner text placement
             c.drawString(x + 2, y - fh + 2, fname[:20])
 
             row_max_h = max(row_max_h, fh)
@@ -489,7 +489,7 @@ def build_pil_pages(uploaded_files, copies):
 
             current_page.paste(img_b, (x, y))
             
-            # Positioned to the bottom-left corner
+            # Bottom-left corner text placement
             text_x = x + int(2 * SCALE)
             text_y = y + fh - int(9 * SCALE)
             draw.text(

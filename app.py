@@ -345,7 +345,7 @@ def get_pil_font(size):
         "DejaVuSans.ttf",
         "LiberationSans-Regular.ttf",
         "FreeSans.ttf",
-        "Helvetica.ttf"
+        "Helvetica.ttf",
     ]
     for fn in font_names:
         try:
@@ -407,7 +407,8 @@ def build_pdf_bytes(uploaded_files, copies):
             )
             c.setFont("Helvetica-Bold", 7)
             c.setFillColorRGB(0, 0, 0)
-            c.drawString(x + 4, y - fh + 4, fname[:20])
+            # Positioned lower and tighter to the left corner
+            c.drawString(x + 2, y - fh + 2, fname[:20])
 
             row_max_h = max(row_max_h, fh)
             photo_in_row += 1
@@ -460,7 +461,7 @@ def build_pil_pages(uploaded_files, copies):
     photo_in_row = 0
 
     # High quality dynamic scaled font
-    font_size_px = int(8 * SCALE)
+    font_size_px = int(7.5 * SCALE)
     font = get_pil_font(font_size_px)
 
     for uf in uploaded_files:
@@ -488,9 +489,9 @@ def build_pil_pages(uploaded_files, copies):
 
             current_page.paste(img_b, (x, y))
             
-            # Text position matching PDF exact offset
-            text_x = x + int(4 * SCALE)
-            text_y = y + fh - int(12 * SCALE)
+            # Positioned to the bottom-left corner
+            text_x = x + int(2 * SCALE)
+            text_y = y + fh - int(9 * SCALE)
             draw.text(
                 (text_x, text_y),
                 fname,

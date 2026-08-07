@@ -144,7 +144,7 @@ def hex_to_rgb(hex_str):
     return tuple(int(hex_str[i:i+2], 16) for i in (0, 2, 4))
 
 def process_single_image(uf, bg_option, custom_bg_color, add_dop, dop_date):
-    """Clean Background Replacement + Direct Photo Text Drawing with Smart Contrast & Outline."""
+    """Clean Background Replacement + Direct Photo Text Drawing (Corner aligned & Dynamic Font)."""
     uf.seek(0)
     img = Image.open(uf).convert("RGB")
     
@@ -165,24 +165,25 @@ def process_single_image(uf, bg_option, custom_bg_color, add_dop, dop_date):
             bg_img.paste(img_rgba, (0, 0), img_rgba)
             img = bg_img.convert("RGB")
 
-    # 2. Add File Name + DOP Date Directly on Photo
+    # 2. Add File Name + DOP Date
     w, h = img.size
     file_stem = os.path.splitext(uf.name)[0]
     
+    # Font size condition: DOP hai toh font chhota karo, sirf name hai toh normal size
     if add_dop and dop_date:
         label = f"{file_stem} DOP: {dop_date}"
+        font_size = max(9, int(h * 0.033))  # Chhota font DOP ke sath
     else:
         label = file_stem
+        font_size = max(11, int(h * 0.048)) # Normal font sirf Name ke sath
 
-    # Auto Brightness Calculation at Bottom Area for Text Contrast
-    sample_box = (0, int(h * 0.82), int(w * 0.90), h)
+    # Auto Brightness Calculation at Bottom Corner
+    sample_box = (0, int(h * 0.85), int(w * 0.90), h)
     crop_area = img.crop(sample_box).convert("L")
     pixels = list(crop_area.getdata())
     avg_brightness = sum(pixels) / max(1, len(pixels))
 
-    # Smart Contrast Settings:
-    # Dark Shirt = White Text with Black Outline
-    # Light Shirt = Black Text with White Outline
+    # Smart Contrast Colors
     if avg_brightness < 128:
         text_color = (255, 255, 255)
         stroke_color = (0, 0, 0)
@@ -191,14 +192,20 @@ def process_single_image(uf, bg_option, custom_bg_color, add_dop, dop_date):
         stroke_color = (255, 255, 255)
 
     draw = ImageDraw.Draw(img)
-    font_size = max(11, int(h * 0.045))
     font = get_pil_font(font_size)
 
-    # Position at bottom-left corner on photo
-    text_x = int(w * 0.04)
-    text_y = h - int(h * 0.08)
+    # Exact Text Height Calculate for Tight Corner Placement
+    try:
+        bbox = draw.textbbox((0, 0), label, font=font)
+        text_h = bbox[3] - bbox[1]
+    except AttributeError:
+        text_h = font_size
 
-    # Draw text with 2px stroke outline so it's 100% visible on any background
+    # Ekdum Kone Aur Niche Alignment
+    text_x = max(2, int(w * 0.015))                   # Ekdum left kone me
+    text_y = h - text_h - max(3, int(h * 0.025))      # Ekdum niche border se thoda upar
+
+    # Draw text with 2px stroke outline
     draw.text((text_x, text_y), label, fill=text_color, font=font, stroke_width=2, stroke_fill=stroke_color)
 
     return img
@@ -355,7 +362,7 @@ st.markdown(
 <div class="hero">
     <div class="hero-icon">📷</div>
     <h1>Photo<span>Pass</span> Pro</h1>
-    <p>File Name + DOP Date Smart Auto-Contrast Ke Saath Generate Karein</p>
+    <p>File Name + DOP Date Smart Contrast Ke Saath Generate Karein</p>
 </div>
 <div class="content">
 """,

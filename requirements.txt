@@ -3,3 +3,5 @@ Pillow
 reportlab
 python-docx
 streamlit-cropper
+rembg
+onnxruntime

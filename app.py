@@ -121,7 +121,7 @@ html, body, [class*="css"] {
 }
 [data-testid="stFileUploader"]:hover { background: #e0f7fa !important; }
 
-[data-testid="stNumberInput"] input, [data-testid="stSelectbox"] select {
+[data-testid="stNumberInput"] input, [data-testid="stSelectbox"] select, [data-testid="stTextInput"] input {
     background: #fff !important; border: 2px solid #b2ebf2 !important;
     border-radius: 10px !important; font-family: 'Montserrat', sans-serif !important;
     font-weight: 700 !important;
@@ -163,6 +163,10 @@ html, body, [class*="css"] {
     background: #fff; border: 1.5px solid #b2ebf2; border-radius: 12px;
     padding: 1rem; margin-bottom: 1rem;
 }
+.student-card {
+    background: #f9fbfb; border: 1px solid #b2dfdb; border-radius: 8px;
+    padding: 8px; margin-bottom: 8px;
+}
 </style>
 """,
     unsafe_allow_html=True,
@@ -187,23 +191,37 @@ def get_pil_font(size):
     except TypeError:
         return ImageFont.load_default()
 
-def process_single_image(uf, bg_option, add_name_date, c_name, p_date):
-    """Applies Background Change and Name & Date Strip if requested."""
+def hex_to_rgb(hex_str):
+    hex_str = hex_str.lstrip('#')
+    return tuple(int(hex_str[i:i+2], 16) for i in (0, 2, 4))
+
+def process_single_image(uf, bg_option, custom_bg_color, add_name_date, c_name, p_date):
+    """Clean Background Removal + Student Specific Name/Date Strip."""
     uf.seek(0)
     img = Image.open(uf).convert("RGB")
     
-    # 1. Background Change (AI feature)
+    # 1. Clean Background Change (AI feature with alpha_matting for sharp edges)
     if bg_option != "Original Background":
         if REMBG_AVAILABLE:
-            img_rgba = remove(img)
-            fill_color = (255, 255, 255) if bg_option == "Plain White" else (212, 230, 241) # Light Blue
+            # Alpha matting gives smooth & crisp hair/edge removal
+            img_rgba = remove(img, alpha_matting=True, alpha_matting_foreground_threshold=240)
+            
+            if bg_option == "Plain White":
+                fill_color = (255, 255, 255)
+            elif bg_option == "Light Blue":
+                fill_color = (212, 230, 241)
+            elif bg_option == "Red (Lal)":
+                fill_color = (235, 64, 52)
+            else: # Custom Selected
+                fill_color = hex_to_rgb(custom_bg_color)
+
             bg_img = Image.new("RGBA", img_rgba.size, fill_color)
             bg_img.paste(img_rgba, (0, 0), img_rgba)
             img = bg_img.convert("RGB")
         else:
             st.warning("⚠️ `rembg` library install nahi hai. Original background use ho raha hai.")
 
-    # 2. Name & Date Strip (Govt Forms)
+    # 2. Student Name & Date Strip
     if add_name_date and (c_name or p_date):
         w, h = img.size
         strip_h = int(h * 0.18)
@@ -241,7 +259,18 @@ def calculate_grid_layout(paper_choice, preset_choice, img_size):
     photos_per_row = max(1, int((page_w - 2 * margin + gap) / (fw + gap)))
     return page_w, page_h, margin, gap, fw, fh, photos_per_row
 
-def build_pdf_bytes(uploaded_files, copies, paper_choice, preset_choice, bg_option, add_name_date, c_name, p_date):
+def resolve_text_color(text_color_choice, custom_text_color, avg_brightness):
+    if text_color_choice == "Auto (Smart Contrast)":
+        return (1.0, 1.0, 1.0) if avg_brightness < 128 else (0.0, 0.0, 0.0), (255, 255, 255) if avg_brightness < 128 else (0, 0, 0)
+    elif text_color_choice == "White (Safed)":
+        return (1.0, 1.0, 1.0), (255, 255, 255)
+    elif text_color_choice == "Black (Kala)":
+        return (0.0, 0.0, 0.0), (0, 0, 0)
+    else:
+        rgb = hex_to_rgb(custom_text_color)
+        return (rgb[0]/255.0, rgb[1]/255.0, rgb[2]/255.0), rgb
+
+def build_pdf_bytes(uploaded_files, copies, paper_choice, preset_choice, bg_option, custom_bg_color, add_name_date, student_details, text_color_choice, custom_text_color):
     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp_pdf:
         pdf_path = tmp_pdf.name
 
@@ -256,7 +285,8 @@ def build_pdf_bytes(uploaded_files, copies, paper_choice, preset_choice, bg_opti
     tmp_files = []
 
     for uf in uploaded_files:
-        img = process_single_image(uf, bg_option, add_name_date, c_name, p_date)
+        s_info = student_details.get(uf.name, {"name": "", "date": ""})
+        img = process_single_image(uf, bg_option, custom_bg_color, add_name_date, s_info["name"], s_info["date"])
         img_b = ImageOps.expand(img, border=BORDER, fill="black")
         
         tf = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
@@ -264,14 +294,15 @@ def build_pdf_bytes(uploaded_files, copies, paper_choice, preset_choice, bg_opti
         img_b.save(tf.name, format="PNG", dpi=(300, 300))
         tmp_files.append(tf.name)
 
-        fname = os.path.splitext(uf.name)[0]
+        fname = s_info["name"] if (add_name_date and s_info["name"]) else os.path.splitext(uf.name)[0]
 
-        # Calculate brightness in bottom-left corner region
         crop_w = min(img_b.width, int(fw * 0.6))
         crop_h = min(img_b.height, int(fh * 0.2))
         crop_area = img_b.crop((0, img_b.height - crop_h, crop_w, img_b.height)).convert("L")
         pixels = list(crop_area.getdata())
         avg_brightness = sum(pixels) / max(1, len(pixels))
+
+        pdf_rgb, _ = resolve_text_color(text_color_choice, custom_text_color, avg_brightness)
 
         for _ in range(int(copies)):
             if y - fh < margin:
@@ -282,13 +313,7 @@ def build_pdf_bytes(uploaded_files, copies, paper_choice, preset_choice, bg_opti
 
             c.drawImage(tf.name, x, y - fh, fw, fh, preserveAspectRatio=True)
             c.setFont("Helvetica-Bold", 7)
-            
-            # Auto Contrast text color
-            if avg_brightness < 128:
-                c.setFillColorRGB(1, 1, 1)
-            else:
-                c.setFillColorRGB(0, 0, 0)
-
+            c.setFillColorRGB(pdf_rgb[0], pdf_rgb[1], pdf_rgb[2])
             c.drawString(x + 2, y - fh + 2, fname[:20])
 
             row_max_h = max(row_max_h, fh)
@@ -311,7 +336,7 @@ def build_pdf_bytes(uploaded_files, copies, paper_choice, preset_choice, bg_opti
 
     return pdf_data
 
-def build_pil_pages(uploaded_files, copies, paper_choice, preset_choice, bg_option, add_name_date, c_name, p_date):
+def build_pil_pages(uploaded_files, copies, paper_choice, preset_choice, bg_option, custom_bg_color, add_name_date, student_details, text_color_choice, custom_text_color):
     DPI = 300
     SCALE = DPI / 72.0
 
@@ -342,11 +367,12 @@ def build_pil_pages(uploaded_files, copies, paper_choice, preset_choice, bg_opti
     font = get_pil_font(font_size_px)
 
     for uf in uploaded_files:
-        img = process_single_image(uf, bg_option, add_name_date, c_name, p_date)
+        s_info = student_details.get(uf.name, {"name": "", "date": ""})
+        img = process_single_image(uf, bg_option, custom_bg_color, add_name_date, s_info["name"], s_info["date"])
         img_resized = img.resize((fw_px - 2 * BORDER_PX, fh_px - 2 * BORDER_PX), Image.Resampling.LANCZOS)
         img_b = ImageOps.expand(img_resized, border=BORDER_PX, fill="black")
 
-        fname = os.path.splitext(uf.name)[0][:20]
+        fname = s_info["name"] if (add_name_date and s_info["name"]) else os.path.splitext(uf.name)[0]
 
         crop_w = min(img_b.width, int(fw_px * 0.6))
         crop_h = min(img_b.height, int(fh_px * 0.2))
@@ -354,7 +380,7 @@ def build_pil_pages(uploaded_files, copies, paper_choice, preset_choice, bg_opti
         pixels = list(crop_area.getdata())
         avg_brightness = sum(pixels) / max(1, len(pixels))
 
-        text_color = (255, 255, 255) if avg_brightness < 128 else (0, 0, 0)
+        _, pil_rgb = resolve_text_color(text_color_choice, custom_text_color, avg_brightness)
 
         for _ in range(int(copies)):
             if y + fh_px > PAGE_H_PX - MARGIN_PX:
@@ -366,7 +392,7 @@ def build_pil_pages(uploaded_files, copies, paper_choice, preset_choice, bg_opti
                 photo_in_row = 0
 
             current_page.paste(img_b, (x, y))
-            draw.text((x + int(2 * SCALE), y + fh_px - int(9 * SCALE)), fname, fill=text_color, font=font)
+            draw.text((x + int(2 * SCALE), y + fh_px - int(9 * SCALE)), fname[:20], fill=pil_rgb, font=font)
 
             row_max_h = max(row_max_h, fh_px)
             photo_in_row += 1
@@ -420,7 +446,7 @@ st.markdown(
     <p>Multiple logon ki photos ek saath (PDF, JPG, WORD) mein arrange karo!</p>
     <div class="steps-row">
         <div class="step-pill"><span class="sn">1</span><span class="st">Upload Photos</span></div>
-        <div class="step-pill"><span class="sn">2</span><span class="st">Paper & Size Chuno</span></div>
+        <div class="step-pill"><span class="sn">2</span><span class="st">Set Details</span></div>
         <div class="step-pill"><span class="sn">3</span><span class="st">Generate & Download</span></div>
     </div>
 </div>
@@ -440,8 +466,8 @@ uploaded_files = st.file_uploader(
 
 st.markdown("<div style='height:.8rem'></div>", unsafe_allow_html=True)
 
-# ── Advanced Controls Section ──
-st.markdown('<span class="sec-lbl">⚙️ Customization & Settings</span>', unsafe_allow_html=True)
+# ── Settings & Controls ──
+st.markdown('<span class="sec-lbl">⚙️ Customization & Colors</span>', unsafe_allow_html=True)
 with st.container():
     st.markdown('<div class="option-card">', unsafe_allow_html=True)
     c1, c2 = st.columns(2)
@@ -454,28 +480,54 @@ with st.container():
     with c3:
         copies = st.number_input("🔢 Har Photo Ki Copies", min_value=1, max_value=30, value=2, step=1)
     with c4:
-        bg_option = st.selectbox("🎨 Background Color Change (AI)", ["Original Background", "Plain White", "Light Blue"], index=0)
+        text_color_choice = st.selectbox("✍️ Text Color", ["Auto (Smart Contrast)", "White (Safed)", "Black (Kala)", "Custom Color"], index=0)
+
+    custom_text_color = "#FFFFFF"
+    if text_color_choice == "Custom Color":
+        custom_text_color = st.color_picker("Text Color Select Karo", "#FFFFFF")
+
+    st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+
+    c5, c6 = st.columns(2)
+    with c5:
+        bg_option = st.selectbox("🎨 Background Color (AI)", ["Original Background", "Plain White", "Light Blue", "Red (Lal)", "Custom Color"], index=0)
+    with c6:
+        custom_bg_color = "#D4E6F1"
+        if bg_option == "Custom Color":
+            custom_bg_color = st.color_picker("Background Color Select Karo", "#D4E6F1")
 
     # Govt Forms Strip Toggle
-    add_name_date = st.checkbox("📝 Name & Date Strip Add Karein? (Govt Forms Special)")
-    c_name, p_date = "", ""
-    if add_name_date:
-        col_n, col_d = st.columns(2)
-        with col_n:
-            c_name = st.text_input("Candidate Name", placeholder="e.g. RAHUL SHARMA")
-        with col_d:
-            today_str = datetime.date.today().strftime("%d/%m/%Y")
-            p_date = st.text_input("Date of Photo (DOP)", value=today_str)
-            
+    add_name_date = st.checkbox("📝 Photo ke Niche Name & Date Strip Add Karein? (Govt Forms Special)")
     st.markdown('</div>', unsafe_allow_html=True)
 
-# ── Preview ──
+# ── Multi-Student Dynamic Name/Date Box ──
+student_details = {}
 if uploaded_files:
+    if add_name_date:
+        st.markdown('<span class="sec-lbl">👥 Har Student Ka Name & Date (Individual)</span>', unsafe_allow_html=True)
+        st.markdown('<div class="option-card">', unsafe_allow_html=True)
+        today_str = datetime.date.today().strftime("%d/%m/%Y")
+        
+        for f in uploaded_files:
+            default_name = os.path.splitext(f.name)[0]
+            st.markdown(f'<div class="student-card"><b>🖼️ Photo:</b> {f.name}</div>', unsafe_allow_html=True)
+            col_n, col_d = st.columns(2)
+            with col_n:
+                s_name = st.text_input("Student Name", value=default_name, key=f"name_{f.name}")
+            with col_d:
+                s_date = st.text_input("Date of Photo (DOP)", value=today_str, key=f"date_{f.name}")
+            student_details[f.name] = {"name": s_name, "date": s_date}
+        st.markdown('</div>', unsafe_allow_html=True)
+    else:
+        for f in uploaded_files:
+            student_details[f.name] = {"name": os.path.splitext(f.name)[0], "date": ""}
+
+    # Photo Previews
     st.markdown(
         f"""
     <div style="background:#e0f7fa;border:1.5px solid #80deea;border-radius:10px;
     padding:.75rem 1rem;margin:.8rem 0;color:#006064;font-size:.88rem;font-weight:700">
-        ✅ &nbsp; {len(uploaded_files)} photo(s) select ki gayi hain
+        ✅ &nbsp; {len(uploaded_files)} photo(s) selected
     </div>
     """,
         unsafe_allow_html=True,
@@ -485,7 +537,7 @@ if uploaded_files:
     cols = st.columns(num_cols)
     for i, f in enumerate(uploaded_files):
         with cols[i % num_cols]:
-            st.image(f, use_container_width=True, caption=f.name.split(".")[0][:8])
+            st.image(f, use_container_width=True, caption=student_details[f.name]["name"][:12])
 
 st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
 
@@ -505,11 +557,19 @@ if st.button("⚡ Files Process & Generate Karo"):
                 unsafe_allow_html=True,
             )
 
-        update_prog(20, "📐 PDF layout tayar ho raha hai...")
-        st.session_state.pdf_bytes = build_pdf_bytes(uploaded_files, copies, paper_choice, preset_choice, bg_option, add_name_date, c_name, p_date)
+        update_prog(20, "📐 PDF layout process ho raha hai...")
+        st.session_state.pdf_bytes = build_pdf_bytes(
+            uploaded_files, copies, paper_choice, preset_choice,
+            bg_option, custom_bg_color, add_name_date, student_details,
+            text_color_choice, custom_text_color
+        )
 
         update_prog(60, "🖼️ High-Res Image (JPG) layout ban raha hai...")
-        st.session_state.pil_pages = build_pil_pages(uploaded_files, copies, paper_choice, preset_choice, bg_option, add_name_date, c_name, p_date)
+        st.session_state.pil_pages = build_pil_pages(
+            uploaded_files, copies, paper_choice, preset_choice,
+            bg_option, custom_bg_color, add_name_date, student_details,
+            text_color_choice, custom_text_color
+        )
 
         update_prog(85, "📝 Word Document (.docx) generate ho raha hai...")
         st.session_state.docx_bytes = build_docx_bytes(st.session_state.pil_pages, paper_choice)
@@ -524,7 +584,7 @@ if st.session_state.get("processed", False) and uploaded_files:
         """
     <div style="background:#e0f7fa;border:2px solid #00bcd4;border-radius:12px;
     padding:.9rem 1rem;text-align:center;color:#006064;font-size:.95rem;font-weight:700;margin:1rem 0">
-        🎉 Sabhi formats tayar hain! Kisi bhi format ko kitni bhi baar download karein:
+        🎉 Sabhi formats tayar hain! Aap direct download kar sakte hain:
     </div>
     """,
         unsafe_allow_html=True,

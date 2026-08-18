@@ -10,11 +10,11 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 import streamlit as st
 
-# Rembg AI Background removal import check
+# Safe Rembg import to prevent app crashes during download timeout
 try:
     from rembg import remove
     REMBG_AVAILABLE = True
-except ImportError:
+except Exception:
     REMBG_AVAILABLE = False
 
 # ================= CONSTANTS =================
@@ -151,39 +151,39 @@ def process_single_image(uf, bg_option, custom_bg_color, add_dop, dop_date):
     # 1. AI Background Change
     if bg_option != "Original Background":
         if REMBG_AVAILABLE:
-            img_rgba = remove(img, alpha_matting=True, alpha_matting_foreground_threshold=240)
-            if bg_option == "Plain White":
-                fill_color = (255, 255, 255)
-            elif bg_option == "Light Blue":
-                fill_color = (212, 230, 241)
-            elif bg_option == "Red (Lal)":
-                fill_color = (235, 64, 52)
-            else:
-                fill_color = hex_to_rgb(custom_bg_color)
+            try:
+                img_rgba = remove(img, alpha_matting=True, alpha_matting_foreground_threshold=240)
+                if bg_option == "Plain White":
+                    fill_color = (255, 255, 255)
+                elif bg_option == "Light Blue":
+                    fill_color = (212, 230, 241)
+                elif bg_option == "Red (Lal)":
+                    fill_color = (235, 64, 52)
+                else:
+                    fill_color = hex_to_rgb(custom_bg_color)
 
-            bg_img = Image.new("RGBA", img_rgba.size, fill_color)
-            bg_img.paste(img_rgba, (0, 0), img_rgba)
-            img = bg_img.convert("RGB")
+                bg_img = Image.new("RGBA", img_rgba.size, fill_color)
+                bg_img.paste(img_rgba, (0, 0), img_rgba)
+                img = bg_img.convert("RGB")
+            except Exception:
+                pass  # Model download issue fallback
 
     # 2. Add File Name + DOP Date
     w, h = img.size
     file_stem = os.path.splitext(uf.name)[0]
     
-    # Font size condition: DOP hai toh font chhota karo, sirf name hai toh normal size
     if add_dop and dop_date:
         label = f"{file_stem} DOP: {dop_date}"
-        font_size = max(9, int(h * 0.033))  # Chhota font DOP ke sath
+        font_size = max(9, int(h * 0.033))
     else:
         label = file_stem
-        font_size = max(11, int(h * 0.048)) # Normal font sirf Name ke sath
+        font_size = max(11, int(h * 0.048))
 
-    # Auto Brightness Calculation at Bottom Corner
     sample_box = (0, int(h * 0.85), int(w * 0.90), h)
     crop_area = img.crop(sample_box).convert("L")
     pixels = list(crop_area.getdata())
     avg_brightness = sum(pixels) / max(1, len(pixels))
 
-    # Smart Contrast Colors
     if avg_brightness < 128:
         text_color = (255, 255, 255)
         stroke_color = (0, 0, 0)
@@ -194,18 +194,15 @@ def process_single_image(uf, bg_option, custom_bg_color, add_dop, dop_date):
     draw = ImageDraw.Draw(img)
     font = get_pil_font(font_size)
 
-    # Exact Text Height Calculate for Tight Corner Placement
     try:
         bbox = draw.textbbox((0, 0), label, font=font)
         text_h = bbox[3] - bbox[1]
     except AttributeError:
         text_h = font_size
 
-    # Ekdum Kone Aur Niche Alignment
-    text_x = max(2, int(w * 0.015))                   # Ekdum left kone me
-    text_y = h - text_h - max(3, int(h * 0.025))      # Ekdum niche border se thoda upar
+    text_x = max(2, int(w * 0.015))
+    text_y = h - text_h - max(3, int(h * 0.025))
 
-    # Draw text with 2px stroke outline
     draw.text((text_x, text_y), label, fill=text_color, font=font, stroke_width=2, stroke_fill=stroke_color)
 
     return img
